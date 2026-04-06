@@ -206,13 +206,14 @@ class TestFindJobByHash:
 
 class TestHasCachedJob:
     def test_returns_path_if_cached(self, cache_manager):
-        job_dir = cache_manager.get_job_dir("Acme", "Engineer", "abc123", create=True)
+        url = "https://example.com/job/test123"
+        job_id = generate_job_id(url)
+        job_dir = cache_manager.get_job_dir("Acme", "Engineer", job_id, create=True)
         cache_manager.save_job(job_dir, {"title": "Engineer"})
 
-        url = "https://example.com/job/123"
         result = cache_manager.has_cached_job(url)
         assert result is not None
-        assert result.name == generate_job_id(url)
+        assert result.name == job_id
 
     def test_returns_none_if_not_cached(self, cache_manager):
         result = cache_manager.has_cached_job("https://example.com/job/999")
