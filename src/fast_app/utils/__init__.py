@@ -11,8 +11,11 @@ from .profile import (
 )
 from .resume import (
     merge_resume_with_base,
+    check_existing_resume,
+)
+from .cover_letter import (
     merge_cover_letter_with_base,
-    check_existing_document,
+    check_existing_cover_letter,
 )
 from .interactive import ask_questions_interactive
 
@@ -26,6 +29,7 @@ __all__ = [
     "load_base_cover_letter",
     "merge_resume_with_base",
     "merge_cover_letter_with_base",
-    "check_existing_document",
+    "check_existing_resume",
+    "check_existing_cover_letter",
     "ask_questions_interactive",
 ]

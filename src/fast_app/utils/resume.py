@@ -50,104 +50,71 @@ def merge_resume_with_base(
     return result
 
 
-def merge_cover_letter_with_base(
-    generated: dict[str, Any],
-    profile: dict[str, Any],
-    base: dict[str, Any] | None,
-    job_title: str,
-    company: str,
-) -> dict[str, Any]:
-    """Merge generated cover letter content with base template.
-
-    The base template provides styling/theme settings, generated data
-    provides the recipient and content.
-
-    Args:
-        generated: Generated cover letter data from LLM
-        profile: User profile data
-        base: Base cover letter template (optional)
-        job_title: Job title for the cover letter
-        company: Company name for the cover letter
-
-    Returns:
-        Merged cover letter data
-    """
-    if not base:
-        # Create minimal structure with all required fields for Reactive Resume
-        return {
-            "basics": profile.get("basics", {}),
-            "summary": {
-                "title": f"Cover Letter for {job_title} at {company}",
-                "content": generated.get("content", ""),
-                "columns": 1,
-                "hidden": False,
-            },
-            "sections": {},
-            "metadata": {"notes": f"Cover letter for {job_title} position at {company}"},
-        }
-
-    result = copy.deepcopy(base)
-
-    # Override summary content with cover letter
-    result["summary"] = {
-        "title": f"Cover Letter for {job_title} at {company}",
-        "content": generated.get("content", ""),
-        "columns": base.get("summary", {}).get("columns", 1),
-        "hidden": False,
-    }
-
-    # Preserve metadata from base if exists
-    if "metadata" in base:
-        result.setdefault("metadata", base["metadata"])
-
-    return result
-
-
-def check_existing_document(
+def check_existing_resume(
     rr_client,  # ReactiveResumeClient
     cache,  # CacheManager
     job_dir,
-    resume_title: str,
     overwrite: bool,
 ) -> str | None:
-    """Check for existing resume/cover letter and handle --overwrite flag.
+    """Check for existing resume and handle --overwrite flag.
+
+    Uses the resume_id from cache to check if it still exists in Reactive Resume.
+    Does NOT search by title - uses direct ID lookup.
 
     Args:
         rr_client: Reactive Resume client
         cache: Cache manager
         job_dir: Job directory
-        resume_title: Title of the resume/cover letter
         overwrite: Whether to overwrite existing
 
     Returns:
-        Resume ID if one exists (or None if deleted)
+        Resume ID if one exists (and should be deleted), None otherwise
 
     Raises:
         click.ClickException: If resume exists and overwrite is False
     """
-    if "resume" in resume_title.lower():
-        cached_reactive = cache.get_cached_reactive_resume(job_dir)
-    elif "cover letter" in resume_title.lower():
-        cached_reactive = cache.get_cached_reactive_cover_letter(job_dir)
-    else:
-        raise RuntimeError(f"Document title {resume_title} is not a resume nor cover letter")
-        
+    import click
+
+    from ..log import logger
+
+    cached_resume = cache.get_cached_reactive_resume(job_dir)
     existing_id: str | None = None
 
-    if cached_reactive:
-        existing_id = cached_reactive.get("resume_id")
+    # Check cache for resume ID
+    if cached_resume:
+        existing_id = cached_resume.get("resume_id")
         if existing_id:
+            # Verify it still exists using direct ID lookup
             resume_check = rr_client.get_resume(existing_id)
             if not resume_check:
+                # ID in cache but doesn't exist - clear it
                 existing_id = None
 
-    if not existing_id:
-        existing_id = rr_client.find_resume_by_title(resume_title)
+    if existing_id and not overwrite:
+        logger.error(f"Resume already exists in Reactive Resume (ID: {existing_id})")
+        click.echo(
+            click.style(
+                "\n❌ Error: Resume already exists in Reactive Resume.",
+                fg="red",
+            )
+        )
+        click.echo(
+            click.style(
+                f"   Resume ID: {existing_id}",
+                fg="yellow",
+            )
+        )
+        click.echo(
+            click.style(
+                "   Use --overwrite-resume to replace it.",
+                fg="yellow",
+            )
+        )
+        raise click.ClickException(
+            f"Resume already exists (ID: {existing_id}). Use --overwrite-resume to overwrite."
+        )
 
     if existing_id and overwrite:
-        import click
-        from ..log import logger
-
         logger.warning(f"Deleting existing resume: {existing_id}")
         rr_client.delete_resume(existing_id)
         return None

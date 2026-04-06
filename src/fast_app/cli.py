@@ -13,7 +13,8 @@ from .services.ollama import OllamaService
 from .services.reactive_resume import ReactiveResumeClient
 from .utils import (
     ask_questions_interactive,
-    check_existing_document,
+    check_existing_cover_letter,
+    check_existing_resume,
     find_profile_file,
     load_base_cover_letter,
     load_base_resume,
@@ -300,9 +301,22 @@ def generate(
                 if verbose and not debug:
                     click.echo("   💾 Saved: cover_letter.json")
 
+                # Debug: Log the cover letter content
+                if debug:
+                    click.echo(
+                        f"\n📝 Generated cover letter content length: {len(cover_letter_data.get('content', ''))}"
+                    )
+                    click.echo(f"📝 Cover letter keys: {list(cover_letter_data.keys())}")
+
             final_cover_letter = merge_cover_letter_with_base(
                 cover_letter_data, profile, base_cl, job_title, company
             )
+
+            # Debug: Log the merged cover letter
+            if debug:
+                click.echo(
+                    f"\n📝 Merged cover letter summary content length: {len(final_cover_letter.get('summary', {}).get('content', ''))}"
+                )
 
         # ============================================
         # PHASE 2: Create/update in Reactive Resume
@@ -311,9 +325,7 @@ def generate(
         resume_title = f"{job_title} at {company} Resume"
 
         # Check for existing resume
-        existing_resume_id = check_existing_document(
-            rr_client, cache, job_dir, resume_title, overwrite_resume
-        )
+        existing_resume_id = check_existing_resume(rr_client, cache, job_dir, overwrite_resume)
 
         if existing_resume_id and not overwrite_resume:
             logger.error(f"Resume '{resume_title}' already exists")
@@ -361,12 +373,13 @@ def generate(
         if not skip_cover_letter and final_cover_letter:
             cover_letter_title = f"{job_title} at {company} Cover Letter"
 
-            # Check for existing cover letter (using same helper but different title)
-            existing_cl_id = check_existing_document(
-                rr_client, cache, job_dir, cover_letter_title, overwrite_resume
+            # Check for existing cover letter using dedicated function
+            existing_cl_id = check_existing_cover_letter(
+                rr_client, cache, job_dir, overwrite_resume
             )
 
             if existing_cl_id and not overwrite_resume:
+                print(f"EXISTS")
                 logger.error(f"Cover letter '{cover_letter_title}' already exists")
                 raise click.ClickException(
                     f"Cover letter '{cover_letter_title}' already exists. "
@@ -375,6 +388,13 @@ def generate(
 
             # Add notes with URL and description to cover letter
             final_cover_letter["metadata"]["notes"] = f"{url}\n\n{job_description}"
+
+            # Debug: Log what we're about to upload
+            if debug:
+                import json
+
+                click.echo("\n📝 Final cover letter structure:")
+                click.echo(json.dumps(final_cover_letter.get("summary", {}), indent=2)[:500])
 
             click.echo("\n🚀 Creating cover letter in Reactive Resume...")
 
