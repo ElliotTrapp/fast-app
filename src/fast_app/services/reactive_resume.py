@@ -169,12 +169,13 @@ class ReactiveResumeClient:
         return None
 
     @with_retry(max_retries=3)
-    def create_resume(self, title: str, tags: list = None) -> str:
+    def create_resume(self, title: str, tags: list | None = None, slug_prefix: str = "") -> str:
         """Create a new resume with title and retry logic.
 
         Args:
             title: Resume title
             tags: List of tags (optional)
+            slug_prefix: Optional prefix to add to slug to avoid collisions
 
         Returns:
             Resume ID
@@ -184,7 +185,12 @@ class ReactiveResumeClient:
         """
         url = f"{self.base_url}/api/openapi/resumes"
 
-        slug = title.lower().replace(" ", "-").replace("/", "-")[:50]
+        # Generate unique slug by adding prefix if provided
+        base_slug = title.lower().replace(" ", "-").replace("/", "-")
+        if slug_prefix:
+            slug = f"{slug_prefix}-{base_slug}"[:50]
+        else:
+            slug = base_slug[:50]
 
         payload = {
             "name": title,

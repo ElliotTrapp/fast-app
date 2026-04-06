@@ -795,7 +795,6 @@ def generate(
             resume_url = rr_client.get_resume_url(resume_id)
             logger.success(f"Resume created: {resume_url}")
 
-        # Generate cover letter
         if not skip_cover_letter:
             base_cover_letter = load_base_cover_letter(base_cover_letter)
             cover_letter_path = job_dir / "cover_letter.json"
@@ -851,8 +850,10 @@ def generate(
 
             click.echo("\n🚀 Creating cover letter in Reactive Resume...")
 
-            # Create cover letter with title and company tag
-            cover_letter_id = rr_client.create_resume(cover_letter_title, tags=[company])
+            # Create cover letter with unique slug to avoid collision with resume
+            cover_letter_id = rr_client.create_resume(
+                cover_letter_title, tags=[company], slug_prefix="cl"
+            )
 
             # Update with data
             rr_client.update_resume(cover_letter_id, final_cover_letter)
