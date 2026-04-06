@@ -1,0 +1,13 @@
+{
+  "ollama": {
+    "endpoint": "http://localhost:11434",
+    "model": "llama3.2",
+    "cloud": false,
+    "debug": false,
+    "api_key": ""
+  },
+  "resume": {
+    "endpoint": "http://localhost:3000",
+    "api_key": "your-api-key-here"
+  }
+}

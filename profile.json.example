@@ -1,0 +1,294 @@
+{
+  "basics": {
+    "name": "Elliot Trapp",
+    "label": "Software Engineer",
+    "email": "mail@elliottrapp.com",
+    "phone": "+1 510-545-2402",
+    "location": {
+      "city": "Los Angeles",
+      "region": "CA",
+      "countryCode": "US"
+    },
+    "url": "www.elliottrapp.com",
+    "profiles": [
+      {
+        "network": "LinkedIn",
+        "url": "https://www.linkedin.com/in/elliot-trapp/"
+      }
+    ],
+    "summary": "Ex-NASA JPL Software Engineer with 6 years of experience who blends exceptional skills across leadership, communication, and technical domains. Has written code to run on Mars, designed the cloud infrastructure scientists use to explore data from Jupiter, and developed visualizations Presidents rely on to watch robots land on another planet."
+  },
+  "work": [
+    {
+      "name": "Optimal Dynamics",
+      "position": "Software Engineer",
+      "startDate": "June 2025",
+      "endDate": "Present",
+      "summary": "Knowledge Base Integration and Automated UAT Tool Development",
+      "highlights": [
+        "Designed and implemented an OpenSearch-based knowledge base, providing agents with contextual information about company processes, facilitating informed decision-making and improving accuracy of test execution throughout the optimization software deployment lifecycle",
+        "Spearheaded the creation of an automated User Acceptance Testing (UAT) tool, reducing deployment timelines from months to just 7 days",
+        "Collaborated with cross-functional teams to ensure the tool effectively assesses deployment readiness, significantly enhancing operational efficiency in logistics optimization"
+      ]
+    },
+    {
+      "name": "NASA Jet Propulsion Laboratory",
+      "position": "Operational Cloud Store Cognizant Engineer",
+      "startDate": "Jan 2020",
+      "endDate": "June 2025",
+      "summary": "Led team of 5 engineers and mentored 4 intern cohorts delivering mission-critical support for 12 active flight projects",
+      "highlights": [
+        "Architected secure, scalable AWS infrastructure using Terraform, implementing multi-region failover strategies and disaster recovery protocols to maintain mission-critical uptime",
+        "Led cloud optimization initiatives that saved $122,333 annually by re-architecting data flows and right-sizing clusters",
+        "Developed and deployed Node.js data lake infrastructure across AWS services including S3, OpenSearch, DynamoDB, API Gateway, CloudFormation, EC2, and ECS, facilitating secure data transmission between 27 engineering teams and diverse international partners",
+        "Established Infrastructure as Code (IaC) practices and developed Terraform and Serverless modules for the Europa Clipper mission, enhancing DevOps efficiency and security",
+        "Built and maintained robust CI/CD pipelines automating testing and deployment, significantly accelerating development cycles and improving software quality",
+        "Designed and operated backend infrastructure for APIs serving up to 99,000 requests per minute, ensuring reliable, high-throughput data access for global scientific analysis",
+        "Scoped 6 development cycles to balance feature requests, technical debt, and developer resources, reliably delivering dozens of new features and fixes over 2 years",
+        "Served as subject matter expert and lead presenter in NASA reviews and partner meetings, communicating complex ground systems architecture and operational requirements to stakeholders across multiple organizational levels",
+        "Delivered training sessions on system administration and cloud operations, enhancing team expertise across the organization"
+      ]
+    },
+    {
+      "name": "NASA Jet Propulsion Laboratory",
+      "position": "Darkroom Visualization Software Team Lead",
+      "startDate": "Jan 2024",
+      "endDate": "June 2025",
+      "highlights": [
+        "Engineered a containerized microservice architecture with a comprehensive observability stack (Grafana, Prometheus) that integrated with hardware monitoring systems, reducing incident response time by 50% and ensuring high availability for mission-critical systems",
+        "Designed dozens of data visualization panels across 5 Grafana dashboards, streamlining communication of complex operational data and improving system traceability",
+        "Completed a systematic industry trade study evaluating commercial technologies across security, scalability, feature set, and community support domains",
+        "Facilitated collection of initial system requirements and design across dozens of stakeholders, maximizing customer buy-in and securing the project's long-term funding base"
+      ]
+    },
+    {
+      "name": "NASA Jet Propulsion Laboratory",
+      "position": "Ground Data System Engineering Team Lead",
+      "startDate": "June 2019",
+      "endDate": "Aug 2024",
+      "highlights": [
+        "Maintained 30-year-old mission-critical data management infrastructure (Distributed Object Manager), delivering 24/7 support and enabling more than 25,000 daily CRUD operations from a single mission",
+        "Spearheaded the implementation of a new Ground Data System (GDS) paradigm, enabling efficient radiating of command products to 12 active spacecraft through the Space Link Extension Command Client (SCC)",
+        "Authored and presented test and release documentation for versions V10.10 through V10.13 of the multi-mission Distributed Object Manager",
+        "Presented numerous Mission Change Requests (MCRs) to the Multi-Mission Change Control Board, communicating technical risks and ensuring alignment with mission objectives",
+        "Engineered automated configurations for critical services on operational hardware using Puppet modules, improving efficiency and system reliability",
+        "Automated integration and synchronization between operational on-prem databases and cloud-based archival object stores",
+        "Authored a custom monitoring tool that minimized the operations team's cognitive load, freeing tactical resources to focus on strategic objectives",
+        "Implemented and managed a JIRA customer service desk, optimizing ticket processing and tracking workflows",
+        "Minimized NetApp hardware transition time, saving the equivalent of six months of full-time Systems Administrator labor",
+        "Provided real-time support during system thread tests and mission-critical operational readiness tests"
+      ]
+    },
+    {
+      "name": "NASA Jet Propulsion Laboratory",
+      "position": "Europa Clipper Information and Data Management Engineer",
+      "startDate": "June 2022",
+      "endDate": "Oct 2024",
+      "highlights": [
+        "Built cloud Ground Data System infrastructure and access policies for the Europa Clipper project, training operational personnel on GDS workflows and tooling",
+        "Developed data management specifications balancing competing technical, cost, and security concerns across the mission",
+        "Presented technical proposals on data management and cloud integration strategies, advancing data system engineering for the project",
+        "Standardized and automated cloud permission schemas across multiple venues using AWS Systems Manager, Terraform, and Serverless, enhancing data integrity, consistency, and access control",
+        "Independently identified, socialized, and implemented automations for cloud permission management",
+        "Leveraged draw.io, PlantUML, and Mermaid.js to produce detailed project documentation and visual diagrams, enhancing clarity for team members and stakeholders",
+        "Developed and maintained Gantt charts to track project progress across multiple initiatives, ensuring alignment with L1 requirements and timely delivery",
+        "Facilitated collaboration by organizing regular tag-ups, maintaining comprehensive wiki documentation, and establishing dedicated Slack channels for project communication"
+      ]
+    },
+    {
+      "name": "NASA Jet Propulsion Laboratory",
+      "position": "Flight Software Developer",
+      "startDate": "Feb 2022",
+      "endDate": "Marc 2023",
+      "highlights": [
+        "Delivered Python autocode modules that generate C flight software for the Mars Sample Return Lander (SRL) project, enabling telemetry uplink and downlink from the surface of Mars",
+        "Developed custom Python tooling that automated code generation, directly improving developer productivity for the flight software team"
+      ]
+    },
+    {
+      "name": "NASA Jet Propulsion Laboratory",
+      "position": "Mars Entry, Descent & Landing (EDL) Visualization Developer",
+      "startDate": "June 2019",
+      "endDate": "Feb 2020",
+      "highlights": [
+        "Integrated orbiter telemetry into the Mars 2020 Entry, Descent, and Landing visualization, displaying the real-time location of the MRO and MAVEN orbiters the night Perseverance landed on Mars",
+        "This visualization was watched by President Joe Biden and French President Emanuel Macron on landing day (February 18, 2021)"
+      ]
+    },
+    {
+      "name": "NASA Jet Propulsion Laboratory",
+      "position": "Robotics Simulation Intern",
+      "startDate": "Jan 2019",
+      "endDate": "June 2019",
+      "highlights": [
+        "Collaborated in a robotics research lab focused on simulation, enhancing physics simulation code to improve the accuracy of robotic behavior modeling in unstructured environments",
+        "Automated the generation of Jupyter notebooks for the Dynamics and Real-time Simulation (DARTS) project, streamlining analysis and simulation capabilities",
+        "Supported the development of autonomous navigation algorithms for planetary exploration"
+      ]
+    },
+    {
+      "name": "NASA Johnson Space Center",
+      "position": "Software Engineering Intern",
+      "startDate": "Aug 2018",
+      "endDate": "Dec 2018",
+      "highlights": [
+        "Developed a recurrent neural network model to classify astronaut cognitive workload using pupillometry image data, enhancing space mission safety and efficiency",
+        "Authored comprehensive Python and MATLAB libraries to automate data cleaning, ingestion, and verification processes for pupillometry data, improving data processing efficiency and accuracy"
+      ]
+    },
+    {
+      "name": "HERE Technologies",
+      "position": "Software Engineering Intern",
+      "startDate": "Feb 2018",
+      "endDate": "Aug 2018",
+      "highlights": [
+        "Implemented V&V modules for calculating network metrics including recall and precision"
+      ]
+    }
+  ],
+  "education": [
+    {
+      "institution": "DePaul University, Chicago",
+      "area": "Computer Science",
+      "studyType": "Master of Science",
+      "startDate": "Aug 2016",
+      "endDate": "Aug 2018"
+    },
+    {
+      "institution": "The New School for Social Research, New York",
+      "area": "Philosophy",
+      "studyType": "Master of Arts",
+      "startDate": "June 2012",
+      "endDate": "July 2015"
+    },
+    {
+      "institution": "DePaul University, Chicago",
+      "area": "Philosophy, Political Science, Mandarin",
+      "studyType": "Bachelor of Arts",
+      "startDate": "Aug 2007",
+      "endDate": "June 2011"
+    }
+  ],
+  "skills": [
+    {
+      "name": "Programming Languages",
+      "keywords": ["Python", "C", "C++", "C#", "Java", "JavaScript", "TypeScript", "Ruby", "Perl", "Bash"]
+    },
+    {
+      "name": "Frameworks & Libraries",
+      "keywords": ["FastAPI", "Flask", "Django", "Node.js", "Pytest", "Boto3", "TensorFlow", "Keras"]
+    },
+    {
+      "name": "Cloud & DevOps",
+      "keywords": ["AWS EC2", "AWS ECS", "AWS Lambda", "AWS S3", "AWS RDS", "AWS DynamoDB", "AWS IAM", "AWS VPC", "AWS API Gateway", "AWS Route 53", "AWS CloudWatch", "AWS CloudFormation", "AWS OpenSearch", "Terraform", "Serverless Framework", "Docker", "Puppet", "Jenkins", "CI/CD", "Infrastructure as Code (IaC)", "Airflow", "HTTP/REST", "TLS/UDP"]
+    },
+    {
+      "name": "Databases & Observability",
+      "keywords": ["PostgreSQL", "MySQL", "MongoDB", "Redis", "SQLite", "Grafana", "Prometheus", "Loki", "Kibana", "InfluxDB", "Telegraf", "TimescaleDB"]
+    },
+    {
+      "name": "Software Engineering",
+      "keywords": ["Software Architecture", "System Engineering", "Microservices Architecture", "API Design", "REST APIs", "Object-Oriented Programming (OOP)", "Test-Driven Development (TDD)", "Automated Testing", "Debugging", "Troubleshooting", "Documentation", "Algorithms", "Data Structures", "Agentic Software Development", "Web Development"]
+    },
+    {
+      "name": "Leadership & Communication",
+      "keywords": ["Leadership", "Communication", "Project Management", "Technical Presentations", "Training & Development", "Agile Methodologies"]
+    },
+    {
+      "name": "Systems & Tools",
+      "keywords": ["Linux", "Unix", "macOS", "Windows", "Virtualization", "Network Protocols", "Web Servers", "Hardware-Software Integration", "Git", "GitHub", "GitLab", "JIRA", "Confluence", "Linear", "Bazel", "Claude", "Ollama", "ChatGPT"]
+    },
+    {
+      "name": "Domains",
+      "keywords": ["Ground Data Systems Engineering", "Failover & Disaster Recovery", "Data Science", "Artificial Intelligence", "Machine Learning", "Front-End Development"]
+    },
+    {
+      "name": "Front-End",
+      "keywords": ["HTML5", "CSS", "Tailwind CSS"]
+    }
+  ],
+  "awards": [
+    { "title": "Voyager Award", "awarder": "NASA JPL", "date": "2022-04" },
+    { "title": "Team Award", "awarder": "NASA JPL", "date": "2022-09" },
+    { "title": "Team Award", "awarder": "NASA JPL", "date": "2022-06" },
+    { "title": "Team Award", "awarder": "NASA JPL", "date": "2021-09" }
+  ],
+  "certificates": [
+    { "name": "AWS Advanceduser", "issuer": "NASA JPL", "date": "2021-01" },
+    { "name": "Open Water Diver", "issuer": "PADI", "date": "2021-08" }
+  ],
+  "projects": [
+    {
+      "name": "Docker Home Media Server",
+      "startDate": "2024",
+      "description": "Developed and administered a home server for friends and family running 13 containerized microservices to deliver a local and private Alternative to commercial cloud application providers. Secured with LetsEncrypt TLS/SSL certificates behind a reverse proxy and GlueTUN VPN and firewall."
+    }
+  ],
+  "publications": [
+    {
+      "name": "Insights from Three Decades of Operating and Modernizing a Multi-Mission Distributed Object Store",
+      "publisher": "IEEE Aerospace Conference",
+      "releaseDate": "2026-03"
+    }
+  ],
+  "preferences": {
+    "workPreferences": {
+      "remote": 0.33,
+      "hybrid": 1.0,
+      "inPerson": 0.67,
+      "locationsPreferred": [
+        "Los Angeles, California",
+        "Chicago, Illinois",
+        "San Francisco, California",
+        "Oakland, California"
+      ],
+      "locationsAcceptable": [],
+      "locationsRejected": []
+    },
+    "companyPreferences": {
+      "industriesPreferred": [],
+      "industriesRejected": [],
+      "companySize": null,
+      "missionImportance": 1.0,
+      "wlbImportance": 0.89,
+      "compensationImportance": 0.0,
+      "growthImportance": 0.78
+    },
+    "careerProfile": {
+      "stage": "mid",
+      "urgency": "moderate",
+      "goals": "Transition into proper flight software role, willing to trade some seniority for the right opportunity",
+      "strengths": [],
+      "weaknesses": [],
+      "topAccomplishments": [],
+      "dreamJob": ""
+    },
+    "careerGoals": {
+      "intro": "About 1 year of flight software experience but otherwise limited experience with low-level, embedded systems, and real-time operating systems. About 7 years at NASA JPL with experience in GDS, infrastructure, mission operations, system engineering, concept of operations, etc.",
+      "objective": "Career adjustment to transition into proper flight software",
+      "willingToTradeSeniority": true,
+      "presentTransitionAsStrength": true
+    },
+    "jobPreferences": {
+      "introLevelFlightSoftware": true,
+      "noDefenseMilitary": true,
+      "focusAreas": ["climate", "science", "exploration", "robotics"],
+      "preferredCompanyType": "academic non-profit public institution"
+    }
+  },
+  "narrative": {
+    "aboutMe": "NASA JPL Software Engineer with 6 years of experience who blends exceptional skills across leadership, communication, and technical domains. Has written code to run on Mars, designed the cloud infrastructure scientists use to explore data from Jupiter, and developed visualizations Presidents rely on to watch robots land on another planet.\n\nPassionate about science, philosophy, and academic pursuits. A very cerebral person who thinks very deeply about problems. An exceptional oral and written communicator. Extremely well equipped to translate complex technical topics to simple, easy to understand concepts. A very good teacher.\n\nGrew up in Oakland, CA. Loves the outdoors, hiking, biking, SCUBA. A huge tinkerer. Has taken woodworking classes. Very handy and repairs things around the house constantly. Has done light electrical, carpentry, drywall, and painting work. Has a workshop in garage that was built and organized myself. Really want to get a table saw and miter saw but don't have the space for it.\n\nReally into electronics, computers, and software. Has done multiple projects with Raspberry Pis and Arduinos. Has a home server with a ton of self-hosted free and open-source software. Loves writing code.\n\nCreated this automated AI job application assistant tool. You provide a simple list of job URLs to an agent, the agent then scrapes the job and company info, the agent then reads my personal information and background and writes custom tailored resumes and cover letters for each job posting. Each resume and cover letter have multiple professional templates to choose from. This was built from a combination of free and open-source software on GitHub, OpenCode, and stuff I did myself.",
+    "whatLookingFor": "Want to achieve a career adjustment. About at mid-stage in career. I miss feeling passionate about my work. I was passionate at JPL but at my current role in the private sector at Optimal Dynamics I'm uninspired. My dream job is building the software and hardware systems used by scientists to investigate and explore other worlds and managing the engineering teams that do that important work. I want to get closer to that goal in several ways: - Non-profit and/or academic organization - Publicly funded organization - Work in the service of science - Work in flight software preferably, but I'd also go back to ground data systems - Do NOT want to work on defense or military infrastructure - Want to work on climate, science, exploration, robotics. I have very limited flight software experience. Practically no embedded systems experience. I would take a junior level flight software role, despite the fact that it would be a paycut and a less senior role.",
+    "tonePreferences": [
+      "Confident but not arrogant",
+      "Specific with numbers and impact",
+      "Avoid buzzwords like 'synergy' or 'leverage'"
+    ],
+    "keyAchievements": [
+      "Worked on flight software for the Mars Sample Return project for 1 year at NASA's Jet Propulsion Laboratory",
+      "Integrated telemetry data by connecting AMPCS to an Entry Descent and Landing (EDL) visualization for the Mars 2020 Perseverance landing. People all around the world watched our visualization when we successfully landed on Mars on February 18th, 2021. American President Joe Biden tweeted a picture of himself watching our visualization on landing day. French President Emanuel Macron also tweeted a picture of him watching our visualization. The team that developed the visualization was 7 people including me. I added the orbiter telemetry data so on landing day we could show the actual positions of Mars Reconnaissance Orbiter and MAVEN.",
+      "Developed the Cloud Ground Data Systems infrastructure and software for the Europa Clipper project that launched to Jupiter successfully on October 14th, 2024.",
+      "Lead the GDS team for a multi-mission subsystem that supported 12 active flight projects."
+    ]
+  }
+}
