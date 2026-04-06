@@ -363,43 +363,14 @@ def merge_cover_letter_with_base(
 
 
 def ask_questions_interactive(questions: list[str]) -> list[str]:
-    """Ask questions interactively and collect answers.
-
-    Supports multiline answers - user can press Enter twice to submit,
-    or Escape + Enter to finish a multiline answer.
-    """
+    """Ask questions interactively and collect answers."""
     answers = []
     click.echo("\n📝 Please answer these questions to help tailor your resume:\n")
-    click.echo(click.style("   Tip: Press Enter twice to finish a multiline answer", fg="cyan"))
-    click.echo()
 
     for i, question in enumerate(questions, 1):
         click.echo(f"{i}. {question}")
-        click.echo("   " + "─" * 60)
-
-        lines = []
-        empty_line_count = 0
-
-        while True:
-            try:
-                line = click.prompt("   ", default="", show_default=False, prompt_suffix="")
-
-                if line == "":
-                    empty_line_count += 1
-                    if empty_line_count >= 1 and lines:
-                        break
-                else:
-                    empty_line_count = 0
-                    lines.append(line)
-            except (KeyboardInterrupt, EOFError):
-                if lines:
-                    break
-                click.echo("\n   Skipping this question...")
-                break
-
-        answer = "\n".join(lines).strip()
+        answer = click.prompt("   Your answer", default="", show_default=False)
         answers.append(answer)
-        click.echo()
 
     return answers
 
