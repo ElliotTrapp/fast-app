@@ -128,14 +128,6 @@ def load_base_cover_letter(cli_path: Optional[str] = None) -> Optional[dict]:
     return None
 
 
-def load_base_cover_letter(cli_path: Optional[str] = None) -> Optional[dict]:
-    """Load base cover letter template from file."""
-    base_path = find_base_cover_letter_file(cli_path)
-    if base_path:
-        return json.loads(base_path.read_text())
-    return None
-
-
 def merge_resume_with_base(generated: dict, base: Optional[dict]) -> dict:
     """Merge generated resume data with base template.
 
@@ -330,7 +322,7 @@ def ask_questions_interactive(questions: List[str]) -> List[str]:
 
 
 @click.group()
-@click.version_option(version="0.1.0")
+@click.version_option(version="1.0.0")
 def main():
     """Fast App: Generate tailored resumes from job URLs."""
     pass

@@ -263,7 +263,6 @@ class OllamaService:
 
             logger.llm_response(len(cleaned))
 
-            print(f"CLEANED: {cleaned}")
             cover_letter_data = json.loads(cleaned)
 
             if "recipient" not in cover_letter_data or "content" not in cover_letter_data:

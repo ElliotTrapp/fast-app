@@ -1,6 +1,6 @@
 [project]
 name = "fast-app"
-version = "0.1.0"
+version = "1.0.0"
 description = "Generate tailored resumes from job URLs and import to Reactive Resume"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -10,7 +10,7 @@ authors = [
 ]
 keywords = ["resume", "jobs", "llm", "ollama", "automation"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
