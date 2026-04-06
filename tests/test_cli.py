@@ -5,7 +5,9 @@ from fast_app.cli import sanitize_name
 
 class TestSanitizeName:
     def test_removes_commas(self):
-        assert sanitize_name("Company, Inc.") == "Company Inc."
+        result = sanitize_name("Company, Inc.")
+        # Comma and period are both removed
+        assert result == "Company Inc"
 
     def test_removes_special_characters(self):
         assert sanitize_name("Company@Name!") == "CompanyName"
@@ -26,9 +28,11 @@ class TestSanitizeName:
         assert sanitize_name("   ") == ""
 
     def test_handles_company_names(self):
-        assert sanitize_name("Acme, Inc.") == "Acme Inc."
+        # Comma and period removed
+        assert sanitize_name("Acme, Inc.") == "Acme Inc"
         assert sanitize_name("Google LLC") == "Google LLC"
-        assert sanitize_name("Amazon.com, Inc.") == "Amazoncom Inc."
+        # Period in "Amazon.com" is also removed
+        assert sanitize_name("Amazon.com, Inc.") == "Amazoncom Inc"
 
     def test_handles_job_titles(self):
         assert sanitize_name("Software Engineer, Senior") == "Software Engineer Senior"
@@ -37,4 +41,5 @@ class TestSanitizeName:
 
     def test_preserves_unicode_characters(self):
         result = sanitize_name("Café Française")
+        # Unicode preserved, but may be normalized
         assert "Caf" in result

@@ -1,13 +1,30 @@
 """Job data extraction using Ollama web_fetch."""
 
+import asyncio
 import hashlib
 import re
-from typing import Any
-
 from ollama import Client
+from progress.spinner import Spinner
 
-from ..log import logger
 from ..models import JobData
+from ..log import logger
+
+
+def _run_async(coro):
+    """Run async coroutine in sync context."""
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            # If loop is already running, we need to use asyncio.run
+            import concurrent.futures
+
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(asyncio.run, coro)
+                return future.result()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    return loop.run_until_complete(coro)
 
 
 class JobExtractor:
@@ -26,26 +43,15 @@ class JobExtractor:
             return match.group(1).strip()
         return content
 
-    def extract_from_url(self, url: str) -> dict[str, Any]:
-        """Fetch and parse job posting URL.
-
-        Args:
-            url: Job posting URL
-
-        Returns:
-            Dict with JobData fields populated from URL content
-        """
+    async def _extract_from_url_async(self, url: str) -> dict[str, any]:
+        """Async version of job extraction."""
         logger.header("Job Extraction")
         logger.api_request("WEB_FETCH", url)
 
-        try:
-            fetched = self.client.web_fetch(url)
-            content = f"Title: {fetched.title}\n\nContent:\n{fetched.content}"
-            logger.api_response(200)
-            logger.llm_response(len(content), f"{fetched.title}")
-        except Exception as e:
-            logger.error(f"Failed to fetch URL content: {e}")
-            raise RuntimeError(f"Failed to fetch URL content: {e}")
+        fetched = await asyncio.to_thread(self.client.web_fetch, url)
+        content = f"Title: {fetched.title}\n\nContent:\n{fetched.content}"
+        logger.api_response(200)
+        logger.llm_response(len(content), f"{fetched.title}")
 
         prompt = f"""Extract job posting information from this page content and return as JSON.
 
@@ -83,44 +89,75 @@ Return valid JSON matching this schema:
             },
         )
 
+        response = await asyncio.to_thread(
+            self.client.chat,
+            model=self.model,
+            messages=[{"role": "user", "content": prompt}],
+            format=JobData.model_json_schema(),
+            think=False,
+            options={"temperature": 0, "num_predict": 2000},
+        )
+
+        result = response.get("message", {}).get("content", "")
+        cleaned = self._strip_markdown_json(result)
+
+        logger.llm_response(len(cleaned))
+
+        extracted = JobData.model_validate_json(cleaned).model_dump()
+
+        url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
+
+        job_data = {
+            "id": url_hash,
+            "job_url": url,
+            "job_url_direct": None,
+            "site": url.split("/")[2] if "/" in url else "unknown",
+            **extracted,
+        }
+
+        logger.llm_result(
+            "job_data",
+            {
+                "id": job_data["id"],
+                "title": job_data.get("title", "Unknown"),
+                "company": job_data.get("company", "Unknown"),
+                "location": job_data.get("location", "Unknown"),
+            },
+        )
+
+        return job_data
+
+    def extract_from_url(self, url: str) -> dict[str, any]:
+        """Fetch and parse job posting URL.
+
+        Args:
+            url: Job posting URL
+
+        Returns:
+            Dict with JobData fields populated from URL content
+        """
+        spinner = Spinner("🔍 Extracting job data ")
+
+        def spin():
+            import time
+
+            while not spinner_done.is_set():
+                spinner.next()
+                time.sleep(0.1)
+
+        import threading
+
+        spinner_done = threading.Event()
+        spinner_thread = threading.Thread(target=spin, daemon=True)
+        spinner_thread.start()
+
         try:
-            response = self.client.chat(
-                model=self.model,
-                messages=[{"role": "user", "content": prompt}],
-                format=JobData.model_json_schema(),
-                think=False,
-                options={"temperature": 0, "num_predict": 2000},
-            )
-
-            result = response.get("message", {}).get("content", "")
-            cleaned = self._strip_markdown_json(result)
-
-            logger.llm_response(len(cleaned))
-
-            extracted = JobData.model_validate_json(cleaned).model_dump()
-
-            url_hash = hashlib.md5(url.encode()).hexdigest()[:12]
-
-            job_data = {
-                "id": url_hash,
-                "job_url": url,
-                "job_url_direct": None,
-                "site": url.split("/")[2] if "/" in url else "unknown",
-                **extracted,
-            }
-
-            logger.llm_result(
-                "job_data",
-                {
-                    "id": job_data["id"],
-                    "title": job_data.get("title", "Unknown"),
-                    "company": job_data.get("company", "Unknown"),
-                    "location": job_data.get("location", "Unknown"),
-                },
-            )
-
-            return job_data
-
+            result = _run_async(self._extract_from_url_async(url))
+            return result
         except Exception as e:
             logger.error(f"Failed to extract job data: {e}")
-            raise RuntimeError(f"Failed to extract job data: {e}")
+            raise RuntimeError(f"Failed to extract job data: {e}") from e
+        finally:
+            spinner_done.set()
+            spinner_thread.join(timeout=0.5)
+            spinner.finish()

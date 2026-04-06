@@ -1,15 +1,20 @@
 """Ollama service for resume generation."""
 
+import asyncio
 import json
 import re
 import time
-from functools import wraps
 from pathlib import Path
-from typing import Any
+from functools import wraps
 
 import requests
 from ollama import Client
+from progress.spinner import Spinner
 
+from ..models import ResumeData
+from ..prompts.resume import get_resume_prompt
+from ..prompts.questions import get_questions_prompt, QuestionList
+from ..prompts.cover_letter import get_cover_letter_prompt
 from ..config import OllamaConfig
 from ..log import logger
 from ..models import ResumeData
@@ -64,6 +69,16 @@ def with_retry(
         return wrapper
 
     return decorator
+
+
+def _run_async(coro):
+    """Run async coroutine in sync context."""
+    try:
+        loop = asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+    return loop.run_until_complete(coro)
 
 
 class OllamaService:
@@ -184,9 +199,48 @@ class OllamaService:
             logger.error(f"Failed to download model '{self.config.model}': {e}")
             return False
 
+    async def _generate_questions_async(
+        self, job_data: dict[str, any], profile_data: dict[str, any]
+    ) -> list[str]:
+        """Async version of question generation."""
+        prompt = get_questions_prompt(job_data, profile_data)
+
+        logger.header("Question Generation")
+        logger.llm_request(self.config.endpoint, self.config.model, len(prompt))
+        logger.llm_call(
+            "generate_questions",
+            {
+                "job_title": job_data.get("title", "Unknown"),
+                "company": job_data.get("company", "Unknown"),
+            },
+        )
+
+        response = await asyncio.to_thread(
+            self.client.chat,
+            model=self.config.model,
+            messages=[{"role": "user", "content": prompt}],
+            format=QuestionList.model_json_schema(),
+            think=False,
+            options={"temperature": 0.3, "num_predict": 1000},
+        )
+
+        result = response.get("message", {}).get("content", "")
+        cleaned = self._strip_markdown_json(result)
+
+        logger.llm_response(len(cleaned))
+
+        question_list = QuestionList.model_validate_json(cleaned)
+        questions = question_list.questions[:8]
+
+        logger.llm_result("questions_parsed", {"count": len(questions)})
+        for i, q in enumerate(questions, 1):
+            logger.detail(f"Q{i}", q[:80] + "..." if len(q) > 80 else q)
+
+        return questions
+
     @with_retry(max_retries=3, initial_delay=2.0)
     def generate_questions(
-        self, job_data: dict[str, Any], profile_data: dict[str, Any]
+        self, job_data: dict[str, any], profile_data: dict[str, any]
     ) -> list[str]:
         """Generate clarifying questions for resume tailoring.
 
@@ -200,65 +254,39 @@ class OllamaService:
         Raises:
             RuntimeError: If unable to connect to Ollama after retries
         """
-        prompt = get_questions_prompt(job_data, profile_data)
+        spinner = Spinner("🤖 Generating questions ")
 
-        logger.header("Question Generation")
-        logger.llm_request(self.config.endpoint, self.config.model, len(prompt))
-        logger.llm_call(
-            "generate_questions",
-            {
-                "job_title": job_data.get("title", "Unknown"),
-                "company": job_data.get("company", "Unknown"),
-            },
-        )
+        def spin():
+            """Background thread to animate spinner."""
+            import time
 
-        response = self.client.chat(
-            model=self.config.model,
-            messages=[{"role": "user", "content": prompt}],
-            format=QuestionList.model_json_schema(),
-            think=False,
-            options={"temperature": 0.3, "num_predict": 1000},
-        )
+            while not spinner_done.is_set():
+                spinner.next()
+                time.sleep(0.1)
 
-        result = response.get("message", {}).get("content", "")
-        cleaned = self._strip_markdown_json(result)
+        import threading
 
-        logger.llm_response(len(cleaned))
-        logger.llm_result("questions", {"count": len(cleaned)})
+        spinner_done = threading.Event()
+        spinner_thread = threading.Thread(target=spin, daemon=True)
+        spinner_thread.start()
 
-        question_list = QuestionList.model_validate_json(cleaned)
-        questions = question_list.questions[:8]
+        try:
+            result = _run_async(self._generate_questions_async(job_data, profile_data))
+            return result
+        finally:
+            spinner_done.set()
+            spinner_thread.join(timeout=0.5)
+            spinner.finish()
 
-        logger.llm_result("questions_parsed", {"count": len(questions)})
-        for i, q in enumerate(questions, 1):
-            logger.detail(f"Q{i}", q[:80] + "..." if len(q) > 80 else q)
-
-        return questions
-
-    @with_retry(max_retries=3, initial_delay=2.0)
-    def generate_resume(
+    async def _generate_resume_async(
         self,
-        job_data: dict[str, Any],
-        profile_data: dict[str, Any],
-        questions: list[str] | None = None,
-        answers: list[str] | None = None,
-        output_path: str = "debug_llm_output.json",
-    ) -> dict[str, Any]:
-        """Generate a tailored resume from job and profile data.
-
-        Args:
-            job_data: Extracted job data
-            profile_data: User profile data
-            questions: Optional list of questions asked
-            answers: Optional list of answers to questions
-            output_path: Path to save raw LLM output on error
-
-        Returns:
-            ResumeData as dict
-
-        Raises:
-            RuntimeError: If LLM fails to generate valid resume after retries
-        """
+        job_data: dict[str, any],
+        profile_data: dict[str, any],
+        questions: list[str] | None,
+        answers: list[str] | None,
+        output_path: str,
+    ) -> dict[str, any]:
+        """Async version of resume generation."""
         prompt = get_resume_prompt(job_data, profile_data, questions, answers)
 
         logger.header("Resume Generation")
@@ -273,7 +301,8 @@ class OllamaService:
             },
         )
 
-        response = self.client.chat(
+        response = await asyncio.to_thread(
+            self.client.chat,
             model=self.config.model,
             messages=[{"role": "user", "content": prompt}],
             format=ResumeData.model_json_schema(),
@@ -296,7 +325,7 @@ class OllamaService:
                 f"Failed to generate valid resume.\n"
                 f"  Raw LLM output saved to: {output_path}\n\n"
                 f"  Suggestion: The model may have generated invalid JSON. Check the output file.\n"
-                f"  Try again or use a different model with: fast-app generate --config config.json <url>"
+                f"  Try again or use a different model."
             ) from e
 
         logger.llm_result(
@@ -317,12 +346,12 @@ class OllamaService:
     @with_retry(max_retries=3, initial_delay=2.0)
     def generate_cover_letter(
         self,
-        job_data: dict[str, Any],
-        profile_data: dict[str, Any],
+        job_data: dict[str, any],
+        profile_data: dict[str, any],
         questions: list[str] | None = None,
         answers: list[str] | None = None,
         output_path: str = "debug_cover_letter_output.json",
-    ) -> dict[str, Any]:
+    ) -> dict[str, any]:
         """Generate a tailored cover letter from job and profile data.
 
         Args:
@@ -338,6 +367,42 @@ class OllamaService:
         Raises:
             RuntimeError: If LLM fails to generate valid cover letter after retries
         """
+        spinner = Spinner("✍️  Generating cover letter ")
+
+        def spin():
+            import time
+
+            while not spinner_done.is_set():
+                spinner.next()
+                time.sleep(0.1)
+
+        import threading
+
+        spinner_done = threading.Event()
+        spinner_thread = threading.Thread(target=spin, daemon=True)
+        spinner_thread.start()
+
+        try:
+            result = _run_async(
+                self._generate_cover_letter_async(
+                    job_data, profile_data, questions, answers, output_path
+                )
+            )
+            return result
+        finally:
+            spinner_done.set()
+            spinner_thread.join(timeout=0.5)
+            spinner.finish()
+
+    async def _generate_cover_letter_async(
+        self,
+        job_data: dict[str, any],
+        profile_data: dict[str, any],
+        questions: list[str] | None,
+        answers: list[str] | None,
+        output_path: str,
+    ) -> dict[str, any]:
+        """Async version of cover letter generation."""
         prompt = get_cover_letter_prompt(job_data, profile_data, questions, answers)
 
         logger.header("Cover Letter Generation")
@@ -350,7 +415,8 @@ class OllamaService:
             },
         )
 
-        response = self.client.chat(
+        response = await asyncio.to_thread(
+            self.client.chat,
             model=self.config.model,
             messages=[{"role": "user", "content": prompt}],
             format={
@@ -403,3 +469,52 @@ class OllamaService:
         )
 
         return cover_letter_data
+
+    @with_retry(max_retries=3, initial_delay=2.0)
+    def generate_resume(
+        self,
+        job_data: dict[str, any],
+        profile_data: dict[str, any],
+        questions: list[str] | None = None,
+        answers: list[str] | None = None,
+        output_path: str = "debug_llm_output.json",
+    ) -> dict[str, any]:
+        """Generate a tailored resume from job and profile data.
+
+        Args:
+            job_data: Extracted job data
+            profile_data: User profile data
+            questions: Optional list of questions asked
+            answers: Optional list of answers to questions
+            output_path: Path to save raw LLM output on error
+
+        Returns:
+            ResumeData as dict
+
+        Raises:
+            RuntimeError: If LLM fails to generate valid resume after retries
+        """
+        spinner = Spinner("📝 Generating resume ")
+
+        def spin():
+            import time
+
+            while not spinner_done.is_set():
+                spinner.next()
+                time.sleep(0.1)
+
+        import threading
+
+        spinner_done = threading.Event()
+        spinner_thread = threading.Thread(target=spin, daemon=True)
+        spinner_thread.start()
+
+        try:
+            result = _run_async(
+                self._generate_resume_async(job_data, profile_data, questions, answers, output_path)
+            )
+            return result
+        finally:
+            spinner_done.set()
+            spinner_thread.join(timeout=0.5)
+            spinner.finish()

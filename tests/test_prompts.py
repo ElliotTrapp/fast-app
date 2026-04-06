@@ -137,19 +137,22 @@ class TestResumeDataModel:
         assert resume.basics.headline == "Engineer"
 
     def test_populates_sections(self):
-        resume = ResumeData(
-            sections=Sections(
-                experience=Sections.__fields__["experience"].type_(
-                    items=[
-                        ExperienceItem(
-                            company="Acme",
-                            position="Engineer",
-                            description="Built things",
-                        )
-                    ]
-                )
-            )
+        from pydantic import BaseModel
+
+        # Get the experience section type
+        resume = ResumeData()
+        experience_section = resume.sections.experience
+
+        # Create an experience item
+        experience_item = ExperienceItem(
+            company="Acme",
+            position="Engineer",
+            location="SF",
+            description="Built things",
         )
+        experience_section.items.append(experience_item)
+
+        resume = ResumeData(sections=resume.sections)
         assert len(resume.sections.experience.items) == 1
         assert resume.sections.experience.items[0].company == "Acme"
 

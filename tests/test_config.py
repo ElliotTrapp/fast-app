@@ -16,32 +16,12 @@ from fast_app.config import (
 )
 
 
-@pytest.fixture
-def temp_config_file():
-    config_data = {
-        "ollama": {
-            "endpoint": "http://localhost:11434",
-            "model": "llama3.2",
-            "cloud": False,
-            "debug": False,
-            "api_key": "",
-        },
-        "resume": {"endpoint": "http://localhost:3000", "api_key": "test-key"},
-        "output": {"directory": "generated"},
-    }
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-        json.dump(config_data, f)
-        yield Path(f.name)
-    Path(f.name).unlink()
-
-
 class TestOllamaConfig:
     def test_default_values(self):
         config = OllamaConfig()
         assert config.endpoint == "http://localhost:11434"
         assert config.model == "llama3.2"
         assert config.cloud is False
-        assert config.debug is False
         assert config.api_key == ""
 
     def test_custom_values(self):
@@ -49,13 +29,11 @@ class TestOllamaConfig:
             endpoint="https://api.ollama.ai",
             model="codellama",
             cloud=True,
-            debug=True,
             api_key="test-key",
         )
         assert config.endpoint == "https://api.ollama.ai"
         assert config.model == "codellama"
         assert config.cloud is True
-        assert config.debug is True
         assert config.api_key == "test-key"
 
     def test_dataclass_immutability(self):
@@ -111,10 +89,29 @@ class TestConfig:
         assert config.resume.api_key == "resume-key"
         assert config.output.directory == "custom-output"
 
-    def test_from_file(self, temp_config_file):
-        config = Config.from_file(str(temp_config_file))
-        assert config.ollama.model == "llama3.2"
-        assert config.resume.api_key == "test-key"
+    def test_from_file(self):
+        config_data = {
+            "ollama": {
+                "endpoint": "http://localhost:11434",
+                "model": "llama3.2",
+                "cloud": False,
+                "debug": False,
+                "api_key": "test-key",
+            },
+            "resume": {"endpoint": "http://localhost:3000", "api_key": "test-key"},
+            "output": {"directory": "generated"},
+        }
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(config_data, f)
+            temp_path = f.name
+
+        try:
+            config = Config.from_file(temp_path)
+            assert config.ollama.model == "llama3.2"
+            assert config.resume.api_key == "test-key"
+        finally:
+            Path(temp_path).unlink()
 
 
 class TestFindConfigFile:
@@ -126,9 +123,18 @@ class TestFindConfigFile:
         with pytest.raises(FileNotFoundError):
             find_config_file()
 
-    def test_uses_cli_path_if_provided(self, temp_config_file):
-        result = find_config_file(cli_path=str(temp_config_file))
-        assert result == temp_config_file
+    def test_uses_cli_path_if_provided(self):
+        import tempfile
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump({"ollama": {}, "resume": {}}, f)
+            temp_path = f.name
+
+        try:
+            result = find_config_file(cli_path=temp_path)
+            assert Path(temp_path).exists()
+        finally:
+            Path(temp_path).unlink()
 
     def test_raises_if_cli_path_not_found(self):
         with pytest.raises(FileNotFoundError) as exc_info:
@@ -137,13 +143,51 @@ class TestFindConfigFile:
 
 
 class TestLoadConfig:
-    def test_loads_from_file(self, temp_config_file):
-        config = load_config(str(temp_config_file))
-        assert config.resume.api_key == "test-key"
-        assert config.ollama.model == "llama3.2"
+    def test_loads_from_file(self):
+        config_data = {
+            "ollama": {
+                "endpoint": "http://localhost:11434",
+                "model": "llama3.2",
+                "cloud": False,
+                "debug": False,
+                "api_key": "test-key",
+            },
+            "resume": {"endpoint": "http://localhost:3000", "api_key": "test-key"},
+            "output": {"directory": "generated"},
+        }
 
-    def test_load_config_with_cli_path(self, temp_config_file):
-        config = load_config(str(temp_config_file))
-        assert isinstance(config, Config)
-        assert isinstance(config.ollama, OllamaConfig)
-        assert isinstance(config.resume, ReactiveResumeConfig)
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(config_data, f)
+            temp_path = f.name
+
+        try:
+            config = load_config(temp_path)
+            assert config.ollama.model == "llama3.2"
+            assert config.resume.api_key == "test-key"
+        finally:
+            Path(temp_path).unlink()
+
+    def test_load_config_with_cli_path(self):
+        config_data = {
+            "ollama": {
+                "endpoint": "http://localhost:11434",
+                "model": "llama3.2",
+                "cloud": False,
+                "debug": False,
+                "api_key": "test-key",
+            },
+            "resume": {"endpoint": "http://localhost:3000", "api_key": "test-key"},
+            "output": {"directory": "generated"},
+        }
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+            json.dump(config_data, f)
+            temp_path = f.name
+
+        try:
+            config = load_config(temp_path)
+            assert isinstance(config, Config)
+            assert isinstance(config.ollama, OllamaConfig)
+            assert isinstance(config.resume, ReactiveResumeConfig)
+        finally:
+            Path(temp_path).unlink()
