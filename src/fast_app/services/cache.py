@@ -4,7 +4,7 @@ import hashlib
 import json
 import re
 from pathlib import Path
-from typing import Dict, Any, Optional, List
+from typing import Any
 
 
 def sanitize_path_component(name: str) -> str:
@@ -26,17 +26,17 @@ class CacheManager:
     def __init__(self, output_dir: Path):
         self.output_dir = output_dir
 
-    def _load_json(self, path: Path) -> Optional[Dict[str, Any]]:
+    def _load_json(self, path: Path) -> dict[str, Any] | None:
         """Load JSON file if it exists."""
         if not path.exists():
             return None
         try:
-            with open(path, "r") as f:
+            with open(path) as f:
                 return json.load(f)
-        except (json.JSONDecodeError, IOError):
+        except (OSError, json.JSONDecodeError):
             return None
 
-    def _save_json(self, path: Path, data: Dict[str, Any]) -> None:
+    def _save_json(self, path: Path, data: dict[str, Any]) -> None:
         """Save JSON file."""
         path.parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as f:
@@ -54,7 +54,7 @@ class CacheManager:
 
         return job_dir
 
-    def find_job_by_hash(self, job_id: str) -> Optional[Path]:
+    def find_job_by_hash(self, job_id: str) -> Path | None:
         """Find job directory by hash using depth-first search.
 
         Searches the entire directory tree for a directory with name matching
@@ -63,7 +63,7 @@ class CacheManager:
         if not self.output_dir.exists():
             return None
 
-        def dfs_search(current_path: Path) -> Optional[Path]:
+        def dfs_search(current_path: Path) -> Path | None:
             """Recursive depth-first search for job_id directory."""
             try:
                 for item in current_path.iterdir():
@@ -85,65 +85,65 @@ class CacheManager:
 
         return dfs_search(self.output_dir)
 
-    def has_cached_job(self, job_url: str) -> Optional[Path]:
+    def has_cached_job(self, job_url: str) -> Path | None:
         """Find cached job by URL hash."""
         job_id = generate_job_id(job_url)
         return self.find_job_by_hash(job_id)
 
-    def get_cached_job(self, job_dir: Path) -> Optional[Dict[str, Any]]:
+    def get_cached_job(self, job_dir: Path) -> dict[str, Any] | None:
         """Load job data from cache."""
         return self._load_json(job_dir / "job.json")
 
-    def save_job(self, job_dir: Path, job_data: Dict[str, Any]) -> None:
+    def save_job(self, job_dir: Path, job_data: dict[str, Any]) -> None:
         """Save job data to cache."""
         self._save_json(job_dir / "job.json", job_data)
 
-    def get_cached_questions(self, job_dir: Path) -> Optional[List[str]]:
+    def get_cached_questions(self, job_dir: Path) -> list[str] | None:
         """Load questions from cache."""
         data = self._load_json(job_dir / "questions.json")
         return data.get("questions") if data else None
 
-    def save_questions(self, job_dir: Path, questions: List[str]) -> None:
+    def save_questions(self, job_dir: Path, questions: list[str]) -> None:
         """Save questions to cache."""
         self._save_json(job_dir / "questions.json", {"questions": questions})
 
-    def get_cached_answers(self, job_dir: Path) -> Optional[List[str]]:
+    def get_cached_answers(self, job_dir: Path) -> list[str] | None:
         """Load answers from cache."""
         data = self._load_json(job_dir / "answers.json")
         return data.get("answers") if data else None
 
-    def save_answers(self, job_dir: Path, answers: List[str]) -> None:
+    def save_answers(self, job_dir: Path, answers: list[str]) -> None:
         """Save answers to cache."""
         self._save_json(job_dir / "answers.json", {"answers": answers})
 
-    def get_cached_resume(self, job_dir: Path) -> Optional[Dict[str, Any]]:
+    def get_cached_resume(self, job_dir: Path) -> dict[str, Any] | None:
         """Load resume data from cache."""
         return self._load_json(job_dir / "resume.json")
 
-    def save_resume(self, job_dir: Path, resume_data: Dict[str, Any]) -> None:
+    def save_resume(self, job_dir: Path, resume_data: dict[str, Any]) -> None:
         """Save resume data to cache."""
         self._save_json(job_dir / "resume.json", resume_data)
 
-    def get_cached_reactive_resume(self, job_dir: Path) -> Optional[Dict[str, Any]]:
+    def get_cached_reactive_resume(self, job_dir: Path) -> dict[str, Any] | None:
         """Load reactive resume metadata from cache."""
         return self._load_json(job_dir / "reactive_resume.json")
 
-    def save_reactive_resume(self, job_dir: Path, reactive_data: Dict[str, Any]) -> None:
+    def save_reactive_resume(self, job_dir: Path, reactive_data: dict[str, Any]) -> None:
         """Save reactive resume metadata to cache."""
         self._save_json(job_dir / "reactive_resume.json", reactive_data)
 
-    def get_cached_reactive_cover_letter(self, job_dir: Path) -> Optional[Dict[str, Any]]:
+    def get_cached_reactive_cover_letter(self, job_dir: Path) -> dict[str, Any] | None:
         """Load reactive cover letter metadata from cache."""
         return self._load_json(job_dir / "reactive_cover_letter.json")
 
-    def save_reactive_cover_letter(self, job_dir: Path, reactive_data: Dict[str, Any]) -> None:
+    def save_reactive_cover_letter(self, job_dir: Path, reactive_data: dict[str, Any]) -> None:
         """Save reactive cover letter metadata to cache."""
         self._save_json(job_dir / "reactive_cover_letter.json", reactive_data)
 
-    def get_cached_cover_letter(self, job_dir: Path) -> Optional[Dict[str, Any]]:
+    def get_cached_cover_letter(self, job_dir: Path) -> dict[str, Any] | None:
         """Load cover letter data from cache."""
         return self._load_json(job_dir / "cover_letter.json")
 
-    def save_cover_letter(self, job_dir: Path, cover_letter_data: Dict[str, Any]) -> None:
+    def save_cover_letter(self, job_dir: Path, cover_letter_data: dict[str, Any]) -> None:
         """Save cover letter data to cache."""
         self._save_json(job_dir / "cover_letter.json", cover_letter_data)

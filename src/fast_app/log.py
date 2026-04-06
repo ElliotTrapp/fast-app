@@ -1,7 +1,8 @@
 """Centralized logging with colored debug output."""
 
 import json
-from typing import Any, Optional
+from typing import Any
+
 import click
 
 
@@ -102,7 +103,7 @@ class Logger:
         self._print(f"    {click.style('model', fg='blue')}: {model}")
         self._print(f"    {click.style('prompt_length', fg='blue')}: {prompt_length} chars")
 
-    def llm_response(self, response_length: int, preview: Optional[str] = None) -> None:
+    def llm_response(self, response_length: int, preview: str | None = None) -> None:
         """Print LLM response."""
         self._print(click.style("  ← LLM Response", fg="green", bold=True))
         self._print(f"    {click.style('response_length', fg='blue')}: {response_length} chars")

@@ -1,16 +1,16 @@
 """Prompt templates for resume generation."""
 
 import json
-from typing import Dict, Any, List, Optional
+from typing import Any
 
 from ..models import ResumeData
 
 
 def get_resume_prompt(
-    job_data: Dict[str, Any],
-    profile_data: Dict[str, Any],
-    questions: Optional[List[str]] = None,
-    answers: Optional[List[str]] = None,
+    job_data: dict[str, Any],
+    profile_data: dict[str, Any],
+    questions: list[str] | None = None,
+    answers: list[str] | None = None,
 ) -> str:
     """Generate the prompt for resume tailoring.
 

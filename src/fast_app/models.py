@@ -1,7 +1,8 @@
 """Pydantic models matching Reactive Resume's ResumeData schema."""
 
 import uuid
-from typing import List, Optional, Dict, Any, Literal
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -41,7 +42,7 @@ class Basics(BaseModel):
     phone: str = ""
     location: str = ""
     website: URL = Field(default_factory=URL)
-    customFields: List[CustomField] = Field(default_factory=list)
+    customFields: list[CustomField] = Field(default_factory=list)
 
 
 class Summary(BaseModel):
@@ -67,7 +68,7 @@ class ExperienceItem(BaseModel):
     period: str = ""
     website: URL = Field(default_factory=URL)
     description: str = ""
-    roles: List[RoleItem] = Field(default_factory=list)
+    roles: list[RoleItem] = Field(default_factory=list)
 
 
 class EducationItem(BaseModel):
@@ -90,7 +91,7 @@ class SkillItem(BaseModel):
     name: str = ""
     proficiency: str = ""
     level: int = 0
-    keywords: List[str] = Field(default_factory=list)
+    keywords: list[str] = Field(default_factory=list)
 
 
 class LanguageItem(BaseModel):
@@ -106,7 +107,7 @@ class InterestItem(BaseModel):
     hidden: bool = False
     icon: str = "star"
     name: str = ""
-    keywords: List[str] = Field(default_factory=list)
+    keywords: list[str] = Field(default_factory=list)
 
 
 class ProfileItem(BaseModel):
@@ -181,84 +182,84 @@ class ProfileSection(BaseModel):
     title: str = "Profiles"
     columns: int = 1
     hidden: bool = False
-    items: List[ProfileItem] = Field(default_factory=list)
+    items: list[ProfileItem] = Field(default_factory=list)
 
 
 class ExperienceSection(BaseModel):
     title: str = "Experience"
     columns: int = 1
     hidden: bool = False
-    items: List[ExperienceItem] = Field(default_factory=list)
+    items: list[ExperienceItem] = Field(default_factory=list)
 
 
 class EducationSection(BaseModel):
     title: str = "Education"
     columns: int = 1
     hidden: bool = False
-    items: List[EducationItem] = Field(default_factory=list)
+    items: list[EducationItem] = Field(default_factory=list)
 
 
 class ProjectSection(BaseModel):
     title: str = "Projects"
     columns: int = 1
     hidden: bool = False
-    items: List[ProjectItem] = Field(default_factory=list)
+    items: list[ProjectItem] = Field(default_factory=list)
 
 
 class SkillSection(BaseModel):
     title: str = "Skills"
     columns: int = 1
     hidden: bool = False
-    items: List[SkillItem] = Field(default_factory=list)
+    items: list[SkillItem] = Field(default_factory=list)
 
 
 class LanguageSection(BaseModel):
     title: str = "Languages"
     columns: int = 1
     hidden: bool = False
-    items: List[LanguageItem] = Field(default_factory=list)
+    items: list[LanguageItem] = Field(default_factory=list)
 
 
 class InterestSection(BaseModel):
     title: str = "Interests"
     columns: int = 1
     hidden: bool = False
-    items: List[InterestItem] = Field(default_factory=list)
+    items: list[InterestItem] = Field(default_factory=list)
 
 
 class AwardSection(BaseModel):
     title: str = "Awards"
     columns: int = 1
     hidden: bool = False
-    items: List[AwardItem] = Field(default_factory=list)
+    items: list[AwardItem] = Field(default_factory=list)
 
 
 class CertificationSection(BaseModel):
     title: str = "Certifications"
     columns: int = 1
     hidden: bool = False
-    items: List[CertificationItem] = Field(default_factory=list)
+    items: list[CertificationItem] = Field(default_factory=list)
 
 
 class PublicationSection(BaseModel):
     title: str = "Publications"
     columns: int = 1
     hidden: bool = False
-    items: List[PublicationItem] = Field(default_factory=list)
+    items: list[PublicationItem] = Field(default_factory=list)
 
 
 class VolunteerSection(BaseModel):
     title: str = "Volunteer"
     columns: int = 1
     hidden: bool = False
-    items: List[VolunteerItem] = Field(default_factory=list)
+    items: list[VolunteerItem] = Field(default_factory=list)
 
 
 class ReferenceSection(BaseModel):
     title: str = "References"
     columns: int = 1
     hidden: bool = False
-    items: List[ReferenceItem] = Field(default_factory=list)
+    items: list[ReferenceItem] = Field(default_factory=list)
 
 
 class Sections(BaseModel):
@@ -294,7 +295,7 @@ class Design(BaseModel):
 
 class Typography(BaseModel):
     fontFamily: str = "IBM Plex Serif"
-    fontWeights: List[str] = Field(default_factory=lambda: ["400", "500"])
+    fontWeights: list[str] = Field(default_factory=lambda: ["400", "500"])
     fontSize: int = 10
     lineHeight: float = 1.5
 
@@ -311,7 +312,7 @@ class Page(BaseModel):
 
 class PageLayout(BaseModel):
     fullWidth: bool = False
-    main: List[str] = Field(
+    main: list[str] = Field(
         default_factory=lambda: [
             "profiles",
             "summary",
@@ -322,7 +323,7 @@ class PageLayout(BaseModel):
             "references",
         ]
     )
-    sidebar: List[str] = Field(
+    sidebar: list[str] = Field(
         default_factory=lambda: [
             "skills",
             "certifications",
@@ -336,7 +337,7 @@ class PageLayout(BaseModel):
 
 class Layout(BaseModel):
     sidebarWidth: int = 35
-    pages: List[PageLayout] = Field(default_factory=lambda: [PageLayout()])
+    pages: list[PageLayout] = Field(default_factory=lambda: [PageLayout()])
 
 
 class CSS(BaseModel):
@@ -350,7 +351,7 @@ class Metadata(BaseModel):
     css: CSS = Field(default_factory=CSS)
     page: Page = Field(default_factory=Page)
     design: Design = Field(default_factory=Design)
-    typography: Dict[str, Typography] = Field(
+    typography: dict[str, Typography] = Field(
         default_factory=lambda: {
             "body": Typography(),
             "heading": Typography(fontWeights=["600"], fontSize=14),
@@ -364,43 +365,43 @@ class ResumeData(BaseModel):
     basics: Basics = Field(default_factory=Basics)
     summary: Summary = Field(default_factory=Summary)
     sections: Sections = Field(default_factory=Sections)
-    customSections: List[Any] = Field(default_factory=list)
+    customSections: list[Any] = Field(default_factory=list)
     metadata: Metadata = Field(default_factory=Metadata)
 
 
 class JobData(BaseModel):
     id: str = ""
     job_url: str = ""
-    job_url_direct: Optional[str] = None
+    job_url_direct: str | None = None
     site: str = ""
     title: str = ""
     company: str = ""
-    location: Optional[str] = None
-    description: Optional[str] = None
-    job_type: Optional[str] = None
-    date_posted: Optional[str] = None
-    min_amount: Optional[float] = None
-    max_amount: Optional[float] = None
-    currency: Optional[str] = None
-    interval: Optional[str] = None
-    is_remote: Optional[bool] = None
-    job_level: Optional[str] = None
-    job_function: Optional[str] = None
-    skills: Optional[str] = None
-    company_industry: Optional[str] = None
-    company_url: Optional[str] = None
-    company_description: Optional[str] = None
-    company_num_employees: Optional[str] = None
+    location: str | None = None
+    description: str | None = None
+    job_type: str | None = None
+    date_posted: str | None = None
+    min_amount: float | None = None
+    max_amount: float | None = None
+    currency: str | None = None
+    interval: str | None = None
+    is_remote: bool | None = None
+    job_level: str | None = None
+    job_function: str | None = None
+    skills: str | None = None
+    company_industry: str | None = None
+    company_url: str | None = None
+    company_description: str | None = None
+    company_num_employees: str | None = None
 
 
 class ProfileData(BaseModel):
-    basics: Dict[str, Any]
-    work: List[Dict[str, Any]] = Field(default_factory=list)
-    education: List[Dict[str, Any]] = Field(default_factory=list)
-    skills: List[Dict[str, Any]] = Field(default_factory=list)
-    awards: List[Dict[str, Any]] = Field(default_factory=list)
-    certificates: List[Dict[str, Any]] = Field(default_factory=list)
-    projects: List[Dict[str, Any]] = Field(default_factory=list)
-    publications: List[Dict[str, Any]] = Field(default_factory=list)
-    preferences: Optional[Dict[str, Any]] = None
-    narrative: Optional[Dict[str, Any]] = None
+    basics: dict[str, Any]
+    work: list[dict[str, Any]] = Field(default_factory=list)
+    education: list[dict[str, Any]] = Field(default_factory=list)
+    skills: list[dict[str, Any]] = Field(default_factory=list)
+    awards: list[dict[str, Any]] = Field(default_factory=list)
+    certificates: list[dict[str, Any]] = Field(default_factory=list)
+    projects: list[dict[str, Any]] = Field(default_factory=list)
+    publications: list[dict[str, Any]] = Field(default_factory=list)
+    preferences: dict[str, Any] | None = None
+    narrative: dict[str, Any] | None = None

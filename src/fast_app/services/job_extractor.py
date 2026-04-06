@@ -2,11 +2,12 @@
 
 import hashlib
 import re
-from typing import Dict, Any
+from typing import Any
+
 from ollama import Client
 
-from ..models import JobData
 from ..log import logger
+from ..models import JobData
 
 
 class JobExtractor:
@@ -25,7 +26,7 @@ class JobExtractor:
             return match.group(1).strip()
         return content
 
-    def extract_from_url(self, url: str) -> Dict[str, Any]:
+    def extract_from_url(self, url: str) -> dict[str, Any]:
         """Fetch and parse job posting URL.
 
         Args:

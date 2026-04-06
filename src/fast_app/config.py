@@ -1,10 +1,9 @@
 """Configuration management with XDG-compliant loading."""
 
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Optional
 import json
 import os
+from dataclasses import dataclass, field
+from pathlib import Path
 
 
 @dataclass
@@ -66,7 +65,7 @@ class Config:
         return cls.from_dict(data)
 
 
-def find_config_file(cli_path: Optional[str] = None) -> Path:
+def find_config_file(cli_path: str | None = None) -> Path:
     """Find config file in order of precedence.
 
     Order:
@@ -108,7 +107,7 @@ def find_config_file(cli_path: Optional[str] = None) -> Path:
     )
 
 
-def load_config(cli_path: Optional[str] = None) -> Config:
+def load_config(cli_path: str | None = None) -> Config:
     """Load configuration from file."""
     config_path = find_config_file(cli_path)
     return Config.from_file(str(config_path))

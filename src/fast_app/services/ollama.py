@@ -2,16 +2,68 @@
 
 import json
 import re
+import time
+from functools import wraps
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Any
+
+import requests
 from ollama import Client
 
-from ..models import ResumeData
-from ..prompts.resume import get_resume_prompt
-from ..prompts.questions import get_questions_prompt, QuestionList
-from ..prompts.cover_letter import get_cover_letter_prompt
 from ..config import OllamaConfig
 from ..log import logger
+from ..models import ResumeData
+from ..prompts.cover_letter import get_cover_letter_prompt
+from ..prompts.questions import QuestionList, get_questions_prompt
+from ..prompts.resume import get_resume_prompt
+
+
+def with_retry(
+    max_retries: int = 3,
+    initial_delay: float = 1.0,
+    backoff_factor: float = 2.0,
+):
+    """Decorator to retry Ollama API calls with exponential backoff."""
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            last_exception: Exception | None = None
+            delay = initial_delay
+
+            for attempt in range(max_retries + 1):
+                try:
+                    return func(self, *args, **kwargs)
+                except requests.RequestException as e:
+                    last_exception = e
+                    if attempt < max_retries:
+                        import click
+
+                        click.echo(
+                            click.style(
+                                f"  ⚠️  Ollama request failed (attempt {attempt + 1}/{max_retries + 1}): {e}",
+                                fg="yellow",
+                            )
+                        )
+                        click.echo(click.style(f"  ⏳ Retrying in {delay:.1f}s...", fg="yellow"))
+                        time.sleep(delay)
+                        delay *= backoff_factor
+                    else:
+                        raise RuntimeError(
+                            f"Ollama request failed after {max_retries + 1} attempts. "
+                            f"Last error: {e}\n\n"
+                            f"Suggestion: Ensure Ollama is running at {self.config.endpoint}\n"
+                            f"  Run: ollama serve\n"
+                            f"  Or check if the model '{self.config.model}' is available: ollama list"
+                        ) from e
+                except Exception as e:
+                    raise e
+
+            raise last_exception
+
+        return wrapper
+
+    return decorator
 
 
 class OllamaService:
@@ -38,8 +90,11 @@ class OllamaService:
             self.client.list()
             logger.api_response(200)
             return True
+        except requests.ConnectionError:
+            logger.error(f"Cannot connect to Ollama at {self.config.endpoint}")
+            return False
         except Exception as e:
-            logger.error(f"Cannot connect to Ollama at {self.config.endpoint}: {e}")
+            logger.error(f"Cannot connect to Ollama: {e}")
             return False
 
     def check_model_available(self) -> bool:
@@ -63,6 +118,56 @@ class OllamaService:
             logger.error(f"Error checking models: {e}")
             return False
 
+    def get_connection_error_message(self, error: Exception) -> str:
+        """Get actionable error message for connection failures.
+
+        Args:
+            error: The exception that occurred
+
+        Returns:
+            User-friendly error message with suggestions
+        """
+        error_str = str(error).lower()
+
+        if "connection" in error_str or "refused" in error_str:
+            return (
+                f"Cannot connect to Ollama at {self.config.endpoint}\n"
+                f"\n"
+                f"  Suggestions:\n"
+                f"  1. Ensure Ollama is running: ollama serve\n"
+                f"  2. Check if endpoint is correct in config.json\n"
+                f"  3. For Ollama Cloud, set 'cloud': true and provide 'api_key'"
+            )
+
+        if "timeout" in error_str:
+            return (
+                f"Ollama request timed out at {self.config.endpoint}\n"
+                f"\n"
+                f"  Suggestions:\n"
+                f"  1. The model may be downloading - wait and try again\n"
+                f"  2. GPU may be busy with another request\n"
+                f"  3. Try a smaller model or increase timeout"
+            )
+
+        if "api" in error_str or "key" in error_str or "unauthorized" in error_str:
+            return (
+                "Ollama API authentication failed\n"
+                "\n"
+                "  Suggestions:\n"
+                "  1. For Ollama Cloud, add 'api_key' to config.json\n"
+                "  2. Get your API key from: https://ollama.ai/settings/keys\n"
+                "  3. Ensure 'cloud': true in config.json"
+            )
+
+        return (
+            f"Ollama error: {error}\n"
+            f"\n"
+            f"  Suggestions:\n"
+            f"  1. Check Ollama status: ollama list\n"
+            f"  2. Verify model is available: ollama pull {self.config.model}\n"
+            f"  3. Check config.json for correct endpoint"
+        )
+
     def ensure_model_available(self) -> bool:
         """Ensure the model is available, downloading if necessary."""
         if self.check_model_available():
@@ -79,9 +184,10 @@ class OllamaService:
             logger.error(f"Failed to download model '{self.config.model}': {e}")
             return False
 
+    @with_retry(max_retries=3, initial_delay=2.0)
     def generate_questions(
-        self, job_data: Dict[str, Any], profile_data: Dict[str, Any]
-    ) -> List[str]:
+        self, job_data: dict[str, Any], profile_data: dict[str, Any]
+    ) -> list[str]:
         """Generate clarifying questions for resume tailoring.
 
         Args:
@@ -90,6 +196,9 @@ class OllamaService:
 
         Returns:
             List of question strings
+
+        Raises:
+            RuntimeError: If unable to connect to Ollama after retries
         """
         prompt = get_questions_prompt(job_data, profile_data)
 
@@ -103,42 +212,38 @@ class OllamaService:
             },
         )
 
-        try:
-            response = self.client.chat(
-                model=self.config.model,
-                messages=[{"role": "user", "content": prompt}],
-                format=QuestionList.model_json_schema(),
-                think=False,
-                options={"temperature": 0.3, "num_predict": 1000},
-            )
+        response = self.client.chat(
+            model=self.config.model,
+            messages=[{"role": "user", "content": prompt}],
+            format=QuestionList.model_json_schema(),
+            think=False,
+            options={"temperature": 0.3, "num_predict": 1000},
+        )
 
-            result = response.get("message", {}).get("content", "")
-            cleaned = self._strip_markdown_json(result)
+        result = response.get("message", {}).get("content", "")
+        cleaned = self._strip_markdown_json(result)
 
-            logger.llm_response(len(cleaned))
-            logger.llm_result("questions", {"count": len(cleaned)})
+        logger.llm_response(len(cleaned))
+        logger.llm_result("questions", {"count": len(cleaned)})
 
-            question_list = QuestionList.model_validate_json(cleaned)
-            questions = question_list.questions[:8]
+        question_list = QuestionList.model_validate_json(cleaned)
+        questions = question_list.questions[:8]
 
-            logger.llm_result("questions_parsed", {"count": len(questions)})
-            for i, q in enumerate(questions, 1):
-                logger.detail(f"Q{i}", q[:80] + "..." if len(q) > 80 else q)
+        logger.llm_result("questions_parsed", {"count": len(questions)})
+        for i, q in enumerate(questions, 1):
+            logger.detail(f"Q{i}", q[:80] + "..." if len(q) > 80 else q)
 
-            return questions
+        return questions
 
-        except Exception as e:
-            logger.error(f"Failed to generate questions: {e}")
-            return []
-
+    @with_retry(max_retries=3, initial_delay=2.0)
     def generate_resume(
         self,
-        job_data: Dict[str, Any],
-        profile_data: Dict[str, Any],
-        questions: Optional[List[str]] = None,
-        answers: Optional[List[str]] = None,
+        job_data: dict[str, Any],
+        profile_data: dict[str, Any],
+        questions: list[str] | None = None,
+        answers: list[str] | None = None,
         output_path: str = "debug_llm_output.json",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Generate a tailored resume from job and profile data.
 
         Args:
@@ -152,7 +257,7 @@ class OllamaService:
             ResumeData as dict
 
         Raises:
-            RuntimeError: If LLM fails to generate valid resume
+            RuntimeError: If LLM fails to generate valid resume after retries
         """
         prompt = get_resume_prompt(job_data, profile_data, questions, answers)
 
@@ -168,53 +273,56 @@ class OllamaService:
             },
         )
 
+        response = self.client.chat(
+            model=self.config.model,
+            messages=[{"role": "user", "content": prompt}],
+            format=ResumeData.model_json_schema(),
+            think=False,
+            options={"temperature": 0.3, "num_predict": 5000},
+        )
+
+        result = response.get("message", {}).get("content", "")
+        cleaned = self._strip_markdown_json(result)
+
+        logger.llm_response(len(cleaned))
+
         try:
-            response = self.client.chat(
-                model=self.config.model,
-                messages=[{"role": "user", "content": prompt}],
-                format=ResumeData.model_json_schema(),
-                think=False,
-                options={"temperature": 0.3, "num_predict": 5000},
-            )
-
-            result = response.get("message", {}).get("content", "")
-            cleaned = self._strip_markdown_json(result)
-
-            logger.llm_response(len(cleaned))
-
             resume_data = ResumeData.model_validate_json(cleaned).model_dump()
-
-            logger.llm_result(
-                "resume",
-                {
-                    "name": resume_data.get("basics", {}).get("name", "Unknown"),
-                    "experience_count": len(
-                        resume_data.get("sections", {}).get("experience", {}).get("items", [])
-                    ),
-                    "skills_count": len(
-                        resume_data.get("sections", {}).get("skills", {}).get("items", [])
-                    ),
-                },
-            )
-
-            return resume_data
-
         except Exception as e:
-            Path(output_path).write_text(cleaned if "cleaned" in dir() else result)
+            Path(output_path).write_text(cleaned)
             logger.error(f"Failed to generate valid resume: {e}")
             logger.warning(f"Raw output saved to {output_path}")
             raise RuntimeError(
-                f"Failed to generate valid resume. Raw output saved to {output_path}: {e}"
-            )
+                f"Failed to generate valid resume.\n"
+                f"  Raw LLM output saved to: {output_path}\n\n"
+                f"  Suggestion: The model may have generated invalid JSON. Check the output file.\n"
+                f"  Try again or use a different model with: fast-app generate --config config.json <url>"
+            ) from e
 
+        logger.llm_result(
+            "resume",
+            {
+                "name": resume_data.get("basics", {}).get("name", "Unknown"),
+                "experience_count": len(
+                    resume_data.get("sections", {}).get("experience", {}).get("items", [])
+                ),
+                "skills_count": len(
+                    resume_data.get("sections", {}).get("skills", {}).get("items", [])
+                ),
+            },
+        )
+
+        return resume_data
+
+    @with_retry(max_retries=3, initial_delay=2.0)
     def generate_cover_letter(
         self,
-        job_data: Dict[str, Any],
-        profile_data: Dict[str, Any],
-        questions: Optional[List[str]] = None,
-        answers: Optional[List[str]] = None,
+        job_data: dict[str, Any],
+        profile_data: dict[str, Any],
+        questions: list[str] | None = None,
+        answers: list[str] | None = None,
         output_path: str = "debug_cover_letter_output.json",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Generate a tailored cover letter from job and profile data.
 
         Args:
@@ -228,7 +336,7 @@ class OllamaService:
             Dict with 'recipient' and 'content' fields
 
         Raises:
-            RuntimeError: If LLM fails to generate valid cover letter
+            RuntimeError: If LLM fails to generate valid cover letter after retries
         """
         prompt = get_cover_letter_prompt(job_data, profile_data, questions, answers)
 
@@ -242,46 +350,56 @@ class OllamaService:
             },
         )
 
+        response = self.client.chat(
+            model=self.config.model,
+            messages=[{"role": "user", "content": prompt}],
+            format={
+                "type": "object",
+                "properties": {
+                    "recipient": {"type": "string"},
+                    "content": {"type": "string"},
+                },
+                "required": ["recipient", "content"],
+            },
+            think=False,
+            options={"temperature": 0.7, "num_predict": 2000},
+        )
+
+        result = response.get("message", {}).get("content", "")
+        cleaned = self._strip_markdown_json(result)
+
+        logger.llm_response(len(cleaned))
+
         try:
-            response = self.client.chat(
-                model=self.config.model,
-                messages=[{"role": "user", "content": prompt}],
-                format={
-                    "type": "object",
-                    "properties": {
-                        "recipient": {"type": "string"},
-                        "content": {"type": "string"},
-                    },
-                    "required": ["recipient", "content"],
-                },
-                think=False,
-                options={"temperature": 0.7, "num_predict": 2000},
-            )
-
-            result = response.get("message", {}).get("content", "")
-            cleaned = self._strip_markdown_json(result)
-
-            logger.llm_response(len(cleaned))
-
             cover_letter_data = json.loads(cleaned)
-
-            if "recipient" not in cover_letter_data or "content" not in cover_letter_data:
-                raise ValueError("Missing required fields: recipient and content")
-
-            logger.llm_result(
-                "cover_letter",
-                {
-                    "recipient": cover_letter_data.get("recipient", ""),
-                    "content_length": len(cover_letter_data.get("content", "")),
-                },
-            )
-
-            return cover_letter_data
-
-        except Exception as e:
-            Path(output_path).write_text(cleaned if "cleaned" in dir() else result)
-            logger.error(f"Failed to generate valid cover letter: {e}")
+        except json.JSONDecodeError as e:
+            Path(output_path).write_text(cleaned)
+            logger.error(f"Failed to parse cover letter JSON: {e}")
             logger.warning(f"Raw output saved to {output_path}")
             raise RuntimeError(
-                f"Failed to generate valid cover letter. Raw output saved to {output_path}: {e}"
+                f"Failed to parse cover letter.\n"
+                f"  Raw LLM output saved to: {output_path}\n\n"
+                f"  Suggestion: The model may have generated invalid JSON. Check the output file.\n"
+                f"  Try again or use a different model."
+            ) from e
+
+        if "recipient" not in cover_letter_data or "content" not in cover_letter_data:
+            Path(output_path).write_text(cleaned)
+            logger.error("Missing required fields in cover letter response")
+            logger.warning(f"Raw output saved to {output_path}")
+            raise RuntimeError(
+                f"Missing required fields in cover letter.\n"
+                f"  Raw LLM output saved to: {output_path}\n\n"
+                f"  Expected: 'recipient' and 'content' fields.\n"
+                f"  Try again or check the output file."
             )
+
+        logger.llm_result(
+            "cover_letter",
+            {
+                "recipient": cover_letter_data.get("recipient", ""),
+                "content_length": len(cover_letter_data.get("content", "")),
+            },
+        )
+
+        return cover_letter_data

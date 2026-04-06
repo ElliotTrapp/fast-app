@@ -2,22 +2,20 @@
 
 import copy
 import json
-import os
 import re
 import uuid
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Any
 
 import click
-from ollama import Client
 
-from .config import Config, load_config
-from .models import ProfileData, ResumeData
+from .config import load_config
+from .log import logger
+from .models import ProfileData
+from .services.cache import CacheManager, generate_job_id
 from .services.job_extractor import JobExtractor
 from .services.ollama import OllamaService
 from .services.reactive_resume import ReactiveResumeClient
-from .services.cache import CacheManager, generate_job_id
-from .log import logger
 
 
 def sanitize_name(name: str) -> str:
@@ -31,7 +29,7 @@ def sanitize_name(name: str) -> str:
     return name.strip()
 
 
-def find_profile_file(cli_path: Optional[str] = None) -> Path:
+def find_profile_file(cli_path: str | None = None) -> Path:
     """Find profile file in order of precedence.
 
     Order:
@@ -63,7 +61,7 @@ def find_profile_file(cli_path: Optional[str] = None) -> Path:
     )
 
 
-def find_base_resume_file(cli_path: Optional[str] = None) -> Optional[Path]:
+def find_base_resume_file(cli_path: str | None = None) -> Path | None:
     """Find base resume template file.
 
     Order:
@@ -84,7 +82,7 @@ def find_base_resume_file(cli_path: Optional[str] = None) -> Optional[Path]:
     return None
 
 
-def find_base_cover_letter_file(cli_path: Optional[str] = None) -> Optional[Path]:
+def find_base_cover_letter_file(cli_path: str | None = None) -> Path | None:
     """Find base cover letter template file.
 
     Order:
@@ -105,14 +103,14 @@ def find_base_cover_letter_file(cli_path: Optional[str] = None) -> Optional[Path
     return None
 
 
-def load_profile(cli_path: Optional[str] = None) -> dict:
+def load_profile(cli_path: str | None = None) -> dict:
     """Load profile from file."""
     profile_path = find_profile_file(cli_path)
     data = json.loads(profile_path.read_text())
     return ProfileData.model_validate(data).model_dump()
 
 
-def load_base_resume(cli_path: Optional[str] = None) -> Optional[dict]:
+def load_base_resume(cli_path: str | None = None) -> dict | None:
     """Load base resume template from file."""
     base_path = find_base_resume_file(cli_path)
     if base_path:
@@ -120,7 +118,7 @@ def load_base_resume(cli_path: Optional[str] = None) -> Optional[dict]:
     return None
 
 
-def load_base_cover_letter(cli_path: Optional[str] = None) -> Optional[dict]:
+def load_base_cover_letter(cli_path: str | None = None) -> dict | None:
     """Load base cover letter template from file."""
     base_path = find_base_cover_letter_file(cli_path)
     if base_path:
@@ -128,7 +126,7 @@ def load_base_cover_letter(cli_path: Optional[str] = None) -> Optional[dict]:
     return None
 
 
-def merge_resume_with_base(generated: dict, base: Optional[dict]) -> dict:
+def merge_resume_with_base(generated: dict, base: dict | None) -> dict:
     """Merge generated resume data with base template.
 
     The base template provides styling/theme settings, and generated
@@ -175,8 +173,64 @@ def merge_resume_with_base(generated: dict, base: Optional[dict]) -> dict:
     return result
 
 
+def check_existing_resume(
+    rr_client: ReactiveResumeClient,
+    cache: CacheManager,
+    job_dir: Path,
+    resume_title: str,
+    overwrite: bool,
+) -> str | None:
+    """Check for existing resume/cover letter and handle --overwrite flag.
+
+    Args:
+        rr_client: Reactive Resume client
+        cache: Cache manager
+        job_dir: Job directory
+        resume_title: Title of the resume/cover letter
+        overwrite: Whether to overwrite existing
+
+    Returns:
+        Resume ID if one exists (or None if deleted)
+
+    Raises:
+        click.ClickException: If resume exists and overwrite is False
+    """
+    cached_reactive = cache.get_cached_reactive_resume(job_dir)
+    existing_id: str | None = None
+
+    if cached_reactive:
+        existing_id = cached_reactive.get("resume_id")
+        if existing_id:
+            resume_check = rr_client.get_resume(existing_id)
+            if not resume_check:
+                existing_id = None
+
+    if not existing_id:
+        existing_id = rr_client.find_resume_by_title(resume_title)
+
+    if existing_id and not overwrite:
+        logger.error(f"Resume '{resume_title}' already exists")
+        click.echo(
+            click.style(
+                f"\n❌ Error: Resume '{resume_title}' already exists in Reactive Resume.",
+                fg="red",
+            )
+        )
+        click.echo(click.style("   Use --overwrite-resume to replace it.", fg="yellow"))
+        raise click.ClickException(
+            f"Resume '{resume_title}' already exists. Use --overwrite-resume to overwrite."
+        )
+
+    if existing_id and overwrite:
+        logger.warning(f"Deleting existing resume: {existing_id}")
+        rr_client.delete_resume(existing_id)
+        return None
+
+    return existing_id
+
+
 def merge_cover_letter_with_base(
-    generated: dict, profile: dict, base: Optional[dict], job_title: str, company: str
+    generated: dict, profile: dict, base: dict | None, job_title: str, company: str
 ) -> dict:
     """Merge generated cover letter content with base template.
 
@@ -308,15 +362,44 @@ def merge_cover_letter_with_base(
     return result
 
 
-def ask_questions_interactive(questions: List[str]) -> List[str]:
-    """Ask questions interactively and collect answers."""
+def ask_questions_interactive(questions: list[str]) -> list[str]:
+    """Ask questions interactively and collect answers.
+
+    Supports multiline answers - user can press Enter twice to submit,
+    or Escape + Enter to finish a multiline answer.
+    """
     answers = []
     click.echo("\n📝 Please answer these questions to help tailor your resume:\n")
+    click.echo(click.style("   Tip: Press Enter twice to finish a multiline answer", fg="cyan"))
+    click.echo()
 
     for i, question in enumerate(questions, 1):
         click.echo(f"{i}. {question}")
-        answer = click.prompt("   Your answer", default="", show_default=False)
+        click.echo("   " + "─" * 60)
+
+        lines = []
+        empty_line_count = 0
+
+        while True:
+            try:
+                line = click.prompt("   ", default="", show_default=False, prompt_suffix="")
+
+                if line == "":
+                    empty_line_count += 1
+                    if empty_line_count >= 1 and lines:
+                        break
+                else:
+                    empty_line_count = 0
+                    lines.append(line)
+            except (KeyboardInterrupt, EOFError):
+                if lines:
+                    break
+                click.echo("\n   Skipping this question...")
+                break
+
+        answer = "\n".join(lines).strip()
         answers.append(answer)
+        click.echo()
 
     return answers
 
@@ -402,18 +485,18 @@ def main():
 )
 def generate(
     url: str,
-    profile_path: Optional[str],
-    base_path: Optional[str],
-    config_path: Optional[str],
-    output: Optional[str],
-    api_key: Optional[str],
+    profile_path: str | None,
+    base_path: str | None,
+    config_path: str | None,
+    output: str | None,
+    api_key: str | None,
     verbose: bool,
     debug: bool,
     skip_questions: bool,
     force: bool,
     overwrite_resume: bool,
     skip_cover_letter: bool,
-    base_cover_letter: Optional[str],
+    base_cover_letter: str | None,
 ):
     """Generate and import resume for job URL.
 
@@ -536,7 +619,7 @@ def generate(
                             )
                         )
                         click.echo(
-                            click.style(f"   Use --overwrite-resume to replace it.", fg="yellow")
+                            click.style("   Use --overwrite-resume to replace it.", fg="yellow")
                         )
                         raise click.ClickException(
                             f"Resume '{resume_title}' already exists. Use --overwrite-resume to overwrite."
@@ -550,7 +633,7 @@ def generate(
                     # Add notes with URL and description
                     final_resume["metadata"]["notes"] = f"{url}\n\n{job_description}"
 
-                    click.echo(f"\n🚀 Creating resume in Reactive Resume...")
+                    click.echo("\n🚀 Creating resume in Reactive Resume...")
 
                     # Create resume with title
                     resume_id = rr_client.create_resume(resume_title, tags=[company])
@@ -590,7 +673,7 @@ def generate(
             cache.save_job(job_dir, job_data)
             logger.cache_save("job", str(job_dir / "job.json"))
             if verbose and not debug:
-                click.echo(f"   💾 Saved: job.json")
+                click.echo("   💾 Saved: job.json")
 
             if not skip_questions:
                 questions_path = job_dir / "questions.json"
@@ -610,13 +693,13 @@ def generate(
                         cache.save_questions(job_dir, questions)
                         logger.cache_save("questions", str(questions_path))
                         if verbose and not debug:
-                            click.echo(f"   💾 Saved: questions.json")
+                            click.echo("   💾 Saved: questions.json")
 
                         answers = ask_questions_interactive(questions)
                         cache.save_answers(job_dir, answers)
                         logger.cache_save("answers", str(answers_path))
                         if verbose and not debug:
-                            click.echo(f"   💾 Saved: answers.json")
+                            click.echo("   💾 Saved: answers.json")
                     else:
                         logger.warning("No questions generated, proceeding with resume creation.")
 
@@ -639,7 +722,7 @@ def generate(
                 cache.save_resume(job_dir, resume_data)
                 logger.cache_save("resume", str(resume_path))
                 if verbose and not debug:
-                    click.echo(f"   💾 Saved: resume.json")
+                    click.echo("   💾 Saved: resume.json")
 
             final_resume = merge_resume_with_base(resume_data, base_resume)
 
@@ -674,7 +757,7 @@ def generate(
                         fg="red",
                     )
                 )
-                click.echo(click.style(f"   Use --overwrite-resume to replace it.", fg="yellow"))
+                click.echo(click.style("   Use --overwrite-resume to replace it.", fg="yellow"))
                 raise click.ClickException(
                     f"Resume '{resume_title}' already exists. Use --overwrite-resume to overwrite."
                 )
@@ -691,7 +774,7 @@ def generate(
             # Add notes with URL and description
             final_resume["metadata"]["notes"] = f"{url}\n\n{job_description}"
 
-            click.echo(f"\n🚀 Creating resume in Reactive Resume...")
+            click.echo("\n🚀 Creating resume in Reactive Resume...")
 
             # Create resume with title and company tag
             resume_id = rr_client.create_resume(resume_title, tags=[company])
@@ -736,7 +819,7 @@ def generate(
                 cache.save_cover_letter(job_dir, cover_letter_data)
                 logger.cache_save("cover_letter", str(cover_letter_path))
                 if verbose and not debug:
-                    click.echo(f"   💾 Saved: cover_letter.json")
+                    click.echo("   💾 Saved: cover_letter.json")
 
             final_cover_letter = merge_cover_letter_with_base(
                 cover_letter_data, profile, base_cover_letter, job_title, company
@@ -766,7 +849,7 @@ def generate(
             # Add notes with URL and description
             final_cover_letter["metadata"]["notes"] = f"{url}\n\n{job_description}"
 
-            click.echo(f"\n🚀 Creating cover letter in Reactive Resume...")
+            click.echo("\n🚀 Creating cover letter in Reactive Resume...")
 
             # Create cover letter with title and company tag
             cover_letter_id = rr_client.create_resume(cover_letter_title, tags=[company])
@@ -809,7 +892,7 @@ def generate(
     envvar="RESUME_API_KEY",
     help="Reactive Resume API key (overrides config)",
 )
-def test_connection(config_path: Optional[str], api_key: Optional[str]):
+def test_connection(config_path: str | None, api_key: str | None) -> None:
     """Test connection to Ollama and Reactive Resume."""
     try:
         config = load_config(config_path)
@@ -848,6 +931,237 @@ def test_connection(config_path: Optional[str], api_key: Optional[str]):
     except Exception as e:
         logger.error(str(e))
         raise click.ClickException(str(e))
+
+
+@main.command("list")
+@click.option(
+    "--config",
+    "-c",
+    "config_path",
+    default=None,
+    help="Path to config file",
+)
+@click.option(
+    "--company",
+    "-co",
+    default=None,
+    help="Filter by company name",
+)
+@click.option(
+    "--recent",
+    "-r",
+    default=None,
+    type=int,
+    help="Show only N most recent jobs",
+)
+def list_jobs(config_path: str | None, company: str | None, recent: int | None) -> None:
+    """List cached job applications.
+
+    Shows company, title, and status for each cached job.
+    """
+    try:
+        config = load_config(config_path)
+        output_dir = Path.cwd() / config.output.directory
+
+        if not output_dir.exists():
+            click.echo("No cached jobs found.")
+            return
+
+        cache = CacheManager(output_dir)
+
+        jobs: list[dict[str, Any]] = []
+
+        for company_dir in sorted(output_dir.iterdir()):
+            if not company_dir.is_dir():
+                continue
+
+            if company and company.lower() not in company_dir.name.lower():
+                continue
+
+            for title_dir in company_dir.iterdir():
+                if not title_dir.is_dir():
+                    continue
+
+                for job_id_dir in title_dir.iterdir():
+                    if not job_id_dir.is_dir():
+                        continue
+
+                    job_data = cache.get_cached_job(job_id_dir)
+                    if not job_data:
+                        continue
+
+                    has_resume = (job_id_dir / "resume.json").exists()
+                    has_cover_letter = (job_id_dir / "cover_letter.json").exists()
+                    has_reactive_resume = (job_id_dir / "reactive_resume.json").exists()
+
+                    jobs.append(
+                        {
+                            "company": company_dir.name,
+                            "title": title_dir.name.replace("-", " "),
+                            "job_id": job_id_dir.name,
+                            "has_resume": has_resume,
+                            "has_cover_letter": has_cover_letter,
+                            "has_reactive_resume": has_reactive_resume,
+                            "path": job_id_dir,
+                        }
+                    )
+
+        if not jobs:
+            click.echo("No cached jobs found.")
+            return
+
+        if recent:
+            jobs = jobs[-recent:]
+
+        click.echo(f"\n📋 Found {len(jobs)} cached job(s):\n")
+        click.echo(f"{'Company':<30} {'Title':<35} {'Status'}")
+        click.echo("─" * 80)
+
+        for job in jobs:
+            status_parts = []
+            if job["has_reactive_resume"]:
+                status_parts.append("✓ Published")
+            elif job["has_resume"]:
+                status_parts.append("○ Generated")
+            else:
+                status_parts.append("○ Extracted")
+
+            if job["has_cover_letter"]:
+                status_parts.append("+ Cover Letter")
+
+            status = " | ".join(status_parts)
+            click.echo(f"{job['company']:<30} {job['title']:<35} {status}")
+
+        click.echo()
+
+    except FileNotFoundError as e:
+        logger.error(str(e))
+        raise click.ClickException(str(e))
+    except Exception as e:
+        logger.error(f"Error listing jobs: {e}")
+        raise click.ClickException(f"Error listing jobs: {e}")
+
+
+@main.command("status")
+@click.option(
+    "--config",
+    "-c",
+    "config_path",
+    default=None,
+    help="Path to config file",
+)
+def status_command(config_path: str | None) -> None:
+    """Show status of dependencies.
+
+    Checks:
+    - Configuration file
+    - Profile file
+    - Ollama connection
+    - Reactive Resume connection
+    - Model availability
+    """
+    try:
+        click.echo("\n📊 Fast App Status\n")
+
+        config_status: list[str] = []
+        config_ok = True
+        try:
+            config = load_config(config_path)
+            config_status.append("✓ Config file found")
+            config_status.append(f"  Endpoint: {config.ollama.endpoint}")
+            config_status.append(f"  Model: {config.ollama.model}")
+            if config.ollama.cloud:
+                config_status.append(
+                    f"  Mode: Cloud (API key: {'✓' if config.ollama.api_key else '✗'})"
+                )
+            else:
+                config_status.append("  Mode: Local")
+        except FileNotFoundError:
+            config_status.append("✗ Config file not found")
+            config_ok = False
+
+        profile_status: list[str] = []
+        profile_ok = True
+        try:
+            profile_path = find_profile_file(None)
+            profile_status.append(f"✓ Profile file found: {profile_path}")
+        except FileNotFoundError:
+            profile_status.append("✗ Profile file not found")
+            profile_ok = False
+
+        ollama_status: list[str] = []
+        ollama_ok = True
+        try:
+            config = load_config(config_path)
+            ollama = OllamaService(config.ollama)
+            if ollama.check_connection():
+                ollama_status.append("✓ Ollama connection")
+                if ollama.check_model_available():
+                    ollama_status.append(f"  Model '{config.ollama.model}' available")
+                else:
+                    ollama_status.append(f"  ⚠ Model '{config.ollama.model}' not downloaded")
+                    ollama_status.append(f"    Run: ollama pull {config.ollama.model}")
+            else:
+                ollama_status.append("✗ Ollama connection failed")
+                ollama_ok = False
+        except Exception as e:
+            ollama_status.append(f"✗ Ollama check failed: {e}")
+            ollama_ok = False
+
+        rr_status: list[str] = []
+        rr_ok = True
+        try:
+            config = load_config(config_path)
+            if config.resume.api_key:
+                rr = ReactiveResumeClient(config.resume.endpoint, config.resume.api_key)
+                if rr.test_connection():
+                    rr_status.append(f"✓ Reactive Resume connection ({config.resume.endpoint})")
+                    rr_status.append("  API key configured")
+                else:
+                    rr_status.append("✗ Reactive Resume connection failed")
+                    rr_ok = False
+            else:
+                rr_status.append("⚠ Reactive Resume: No API key configured")
+                rr_ok = False
+        except FileNotFoundError:
+            rr_status.append("✗ Config not found - cannot check Reactive Resume")
+            rr_ok = False
+        except Exception as e:
+            rr_status.append(f"✗ Reactive Resume check failed: {e}")
+            rr_ok = False
+
+        click.echo("Configuration:")
+        for line in config_status:
+            click.echo(f"  {line}")
+        click.echo()
+
+        click.echo("Profile:")
+        for line in profile_status:
+            click.echo(f"  {line}")
+        click.echo()
+
+        click.echo("Ollama:")
+        for line in ollama_status:
+            click.echo(f"  {line}")
+        click.echo()
+
+        click.echo("Reactive Resume:")
+        for line in rr_status:
+            click.echo(f"  {line}")
+        click.echo()
+
+        all_ok = config_ok and profile_ok and ollama_ok and rr_ok
+        if all_ok:
+            click.echo(click.style("✓ All checks passed!", fg="green", bold=True))
+        else:
+            click.echo(click.style("⚠ Some checks failed. See details above.", fg="yellow"))
+
+    except FileNotFoundError as e:
+        logger.error(str(e))
+        raise click.ClickException(str(e))
+    except Exception as e:
+        logger.error(f"Error checking status: {e}")
+        raise click.ClickException(f"Error checking status: {e}")
 
 
 if __name__ == "__main__":

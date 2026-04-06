@@ -1,14 +1,63 @@
 """Reactive Resume API client."""
 
-from typing import Dict, Any, Optional
-import requests
 import json
+import time
+from typing import Any
+
+import requests
 
 from ..log import logger
 
 
+def with_retry(
+    max_retries: int = 3,
+    initial_delay: float = 1.0,
+    backoff_factor: float = 2.0,
+    retryable_status_codes: tuple = (429, 502, 503, 504),
+):
+    """Decorator to retry API calls with exponential backoff."""
+
+    def decorator(func):
+        def wrapper(self, *args, **kwargs):
+            last_exception: Exception | None = None
+            delay = initial_delay
+
+            for attempt in range(max_retries + 1):
+                try:
+                    return func(self, *args, **kwargs)
+                except requests.RequestException as e:
+                    last_exception = e
+                    if attempt < max_retries:
+                        import click
+
+                        click.echo(
+                            click.style(
+                                f"  ⚠️  API request failed (attempt {attempt + 1}/{max_retries + 1}): {e}",
+                                fg="yellow",
+                            )
+                        )
+                        click.echo(click.style(f"  ⏳ Retrying in {delay:.1f}s...", fg="yellow"))
+                        time.sleep(delay)
+                        delay *= backoff_factor
+                    else:
+                        raise RuntimeError(
+                            f"API request failed after {max_retries + 1} attempts.\n"
+                            f"  Last error: {e}\n\n"
+                            f"  Suggestion: Check if Reactive Resume is running at {self.base_url}\n"
+                            f"  Verify your API key is valid in config.json"
+                        ) from e
+                except Exception as e:
+                    raise e
+
+            raise last_exception
+
+        return wrapper
+
+    return decorator
+
+
 class ReactiveResumeClient:
-    """Client for Reactive Resume API."""
+    """Client for Reactive Resume API with retry logic."""
 
     def __init__(self, endpoint: str, api_key: str):
         self.base_url = endpoint.rstrip("/")
@@ -31,8 +80,9 @@ class ReactiveResumeClient:
             logger.error(f"Connection error: {e}")
             return False
 
+    @with_retry(max_retries=3)
     def list_resumes(self) -> list:
-        """List all resumes.
+        """List all resumes with retry logic.
 
         Returns:
             List of resume objects
@@ -54,7 +104,6 @@ class ReactiveResumeClient:
 
             result = response.json()
 
-            # Handle different response formats
             if isinstance(result, list):
                 return result
             elif isinstance(result, dict):
@@ -65,8 +114,9 @@ class ReactiveResumeClient:
         except (requests.RequestException, json.JSONDecodeError):
             return []
 
-    def get_resume(self, resume_id: str) -> Optional[Dict[str, Any]]:
-        """Get resume by ID.
+    @with_retry(max_retries=3)
+    def get_resume(self, resume_id: str) -> dict[str, Any] | None:
+        """Get resume by ID with retry logic.
 
         Args:
             resume_id: Resume ID
@@ -97,7 +147,7 @@ class ReactiveResumeClient:
         except (requests.RequestException, json.JSONDecodeError):
             return None
 
-    def find_resume_by_title(self, title: str) -> Optional[str]:
+    def find_resume_by_title(self, title: str) -> str | None:
         """Find a resume by title and return its ID if found.
 
         Args:
@@ -118,8 +168,9 @@ class ReactiveResumeClient:
 
         return None
 
+    @with_retry(max_retries=3)
     def create_resume(self, title: str, tags: list = None) -> str:
-        """Create a new resume with title.
+        """Create a new resume with title and retry logic.
 
         Args:
             title: Resume title
@@ -129,60 +180,66 @@ class ReactiveResumeClient:
             Resume ID
 
         Raises:
-            RuntimeError: If creation fails
+            RuntimeError: If creation fails after retries
         """
-        try:
-            url = f"{self.base_url}/api/openapi/resumes"
+        url = f"{self.base_url}/api/openapi/resumes"
 
-            # Generate slug from title
-            slug = title.lower().replace(" ", "-").replace("/", "-")[:50]
+        slug = title.lower().replace(" ", "-").replace("/", "-")[:50]
 
-            payload = {
-                "name": title,
-                "slug": slug,
-                "tags": tags or [],
-            }
+        payload = {
+            "name": title,
+            "slug": slug,
+            "tags": tags or [],
+        }
 
-            logger.api_request("POST", url)
-            logger.detail("name", title)
-            logger.detail("slug", slug)
-            logger.detail("tags", tags or [])
+        logger.api_request("POST", url)
+        logger.detail("name", title)
+        logger.detail("slug", slug)
+        logger.detail("tags", tags or [])
 
-            response = requests.post(
-                url,
-                headers=self.headers,
-                json=payload,
-                timeout=30,
+        response = requests.post(
+            url,
+            headers=self.headers,
+            json=payload,
+            timeout=30,
+        )
+
+        if response.status_code == 401:
+            raise RuntimeError(
+                "Authentication failed.\n"
+                "  Suggestion: Check your Reactive Resume API key in config.json\n"
+                "  Generate a new key from your Reactive Resume settings page"
             )
 
-            if response.status_code == 401:
-                raise RuntimeError("Authentication failed. Check your API key.")
+        if response.status_code >= 400:
+            error_detail = response.text if response.content else "Unknown error"
+            raise RuntimeError(
+                f"Failed to create resume: {error_detail}\n"
+                f"  Status: {response.status_code}\n\n"
+                f"  Suggestion: Check if Reactive Resume is running at {self.base_url}"
+            )
 
-            if response.status_code >= 400:
-                error_detail = response.text if response.content else "Unknown error"
-                raise RuntimeError(f"Failed to create resume: {error_detail}")
+        response.raise_for_status()
 
-            response.raise_for_status()
+        logger.api_response(response.status_code)
 
-            logger.api_response(response.status_code)
+        result = response.json()
 
-            result = response.json()
+        resume_id = result if isinstance(result, str) else result.get("id")
 
-            # Result is just the resume ID string
-            resume_id = result if isinstance(result, str) else result.get("id")
+        if not resume_id:
+            raise RuntimeError(
+                f"Failed to get resume ID from response: {result}\n"
+                f"  Suggestion: The API response format may have changed. Check Reactive Resume version."
+            )
 
-            if not resume_id:
-                raise RuntimeError(f"Failed to get resume ID from response: {result}")
+        logger.success(f"Resume created: {resume_id}")
 
-            logger.success(f"Resume created: {resume_id}")
+        return str(resume_id)
 
-            return str(resume_id)
-
-        except requests.RequestException as e:
-            raise RuntimeError(f"Failed to create resume: {e}")
-
-    def update_resume(self, resume_id: str, resume_data: Dict[str, Any]) -> bool:
-        """Update a resume with data.
+    @with_retry(max_retries=3)
+    def update_resume(self, resume_id: str, resume_data: dict[str, Any]) -> bool:
+        """Update a resume with data and retry logic.
 
         Args:
             resume_id: Resume ID
@@ -192,40 +249,46 @@ class ReactiveResumeClient:
             True if updated successfully
 
         Raises:
-            RuntimeError: If update fails
+            RuntimeError: If update fails after retries
         """
-        try:
-            url = f"{self.base_url}/api/openapi/resumes/{resume_id}"
+        url = f"{self.base_url}/api/openapi/resumes/{resume_id}"
 
-            logger.api_request("PUT", url)
-            logger.detail("data_keys", list(resume_data.keys()))
+        logger.api_request("PUT", url)
+        logger.detail("data_keys", list(resume_data.keys()))
 
-            response = requests.put(
-                url,
-                headers=self.headers,
-                json={"data": resume_data},
-                timeout=30,
+        response = requests.put(
+            url,
+            headers=self.headers,
+            json={"data": resume_data},
+            timeout=30,
+        )
+
+        if response.status_code == 401:
+            raise RuntimeError(
+                "Authentication failed.\n"
+                "  Suggestion: Check your Reactive Resume API key in config.json"
             )
 
-            if response.status_code == 401:
-                raise RuntimeError("Authentication failed. Check your API key.")
+        if response.status_code == 404:
+            raise RuntimeError(
+                f"Resume {resume_id} not found.\n"
+                f"  Suggestion: The resume may have been deleted. Try again with --force"
+            )
 
-            if response.status_code == 404:
-                raise RuntimeError(f"Resume {resume_id} not found")
+        if response.status_code >= 400:
+            error_detail = response.text if response.content else "Unknown error"
+            raise RuntimeError(
+                f"Failed to update resume: {error_detail}\n"
+                f"  Status: {response.status_code}\n\n"
+                f"  Suggestion: Check if the resume data is valid"
+            )
 
-            if response.status_code >= 400:
-                error_detail = response.text if response.content else "Unknown error"
-                raise RuntimeError(f"Failed to update resume: {error_detail}")
+        response.raise_for_status()
 
-            response.raise_for_status()
+        logger.api_response(response.status_code)
+        logger.success(f"Resume updated: {resume_id}")
 
-            logger.api_response(response.status_code)
-            logger.success(f"Resume updated: {resume_id}")
-
-            return True
-
-        except requests.RequestException as e:
-            raise RuntimeError(f"Failed to update resume: {e}")
+        return True
 
     def delete_resume(self, resume_id: str) -> bool:
         """Delete a resume by ID.

@@ -1,15 +1,16 @@
 """Prompt templates for question generation."""
 
 import json
-from typing import Dict, Any, List
+from typing import Any
+
 from pydantic import BaseModel
 
 
 class QuestionList(BaseModel):
-    questions: List[str] = []
+    questions: list[str] = []
 
 
-def get_questions_prompt(job_data: Dict[str, Any], profile_data: Dict[str, Any]) -> str:
+def get_questions_prompt(job_data: dict[str, Any], profile_data: dict[str, Any]) -> str:
     """Generate the prompt for asking clarifying questions.
 
     Args:
