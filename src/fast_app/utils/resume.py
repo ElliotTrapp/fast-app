@@ -1,8 +1,8 @@
 """Resume utility functions."""
 
 import copy
-import uuid
 from typing import Any
+from ..log import logger
 
 
 def merge_resume_with_base(
@@ -73,18 +73,28 @@ def merge_cover_letter_with_base(
         Merged cover letter data
     """
     if not base:
-        # Create minimal structure
+        # Create minimal structure with all required fields for Reactive Resume
         return {
             "basics": profile.get("basics", {}),
-            "summary": {"content": generated.get("content", "")},
-            "metadata": {"notes": f"Cover letter for {job_title} at {company}"},
+            "summary": {
+                "title": f"Cover Letter for {job_title} at {company}",
+                "content": generated.get("content", ""),
+                "columns": 1,
+                "hidden": False,
+            },
             "sections": {},
+            "metadata": {"notes": f"Cover letter for {job_title} position at {company}"},
         }
 
     result = copy.deepcopy(base)
 
     # Override summary content with cover letter
-    result["summary"] = {"content": generated.get("content", "")}
+    result["summary"] = {
+        "title": f"Cover Letter for {job_title} at {company}",
+        "content": generated.get("content", ""),
+        "columns": base.get("summary", {}).get("columns", 1),
+        "hidden": False,
+    }
 
     # Preserve metadata from base if exists
     if "metadata" in base:
@@ -93,7 +103,7 @@ def merge_cover_letter_with_base(
     return result
 
 
-def check_existing_resume(
+def check_existing_document(
     rr_client,  # ReactiveResumeClient
     cache,  # CacheManager
     job_dir,
@@ -115,7 +125,13 @@ def check_existing_resume(
     Raises:
         click.ClickException: If resume exists and overwrite is False
     """
-    cached_reactive = cache.get_cached_reactive_resume(job_dir)
+    if "resume" in resume_title.lower():
+        cached_reactive = cache.get_cached_reactive_resume(job_dir)
+    elif "cover letter" in resume_title.lower():
+        cached_reactive = cache.get_cached_reactive_cover_letter(job_dir)
+    else:
+        raise RuntimeError(f"Document title {resume_title} is not a resume nor cover letter")
+        
     existing_id: str | None = None
 
     if cached_reactive:

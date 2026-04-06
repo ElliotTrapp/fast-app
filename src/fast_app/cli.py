@@ -13,7 +13,7 @@ from .services.ollama import OllamaService
 from .services.reactive_resume import ReactiveResumeClient
 from .utils import (
     ask_questions_interactive,
-    check_existing_resume,
+    check_existing_document,
     find_profile_file,
     load_base_cover_letter,
     load_base_resume,
@@ -195,7 +195,6 @@ def generate(
                         logger.success("Using cached questions and answers")
 
         if not used_cache:
-            click.echo(f"🔍 Extracting job data from {url}...")
             job_data = JobExtractor(ollama.client, config.ollama.model).extract_from_url(url)
             raw_title = job_data.get("title", "Unknown")
             raw_company = job_data.get("company", "Unknown")
@@ -227,7 +226,6 @@ def generate(
                     if verbose and not debug:
                         logger.success("Using cached questions and answers")
                 else:
-                    click.echo("\n🤖 Generating questions to tailor your resume...")
                     questions = ollama.generate_questions(job_data, profile)
                     if questions:
                         cache.save_questions(job_dir, questions)
@@ -243,6 +241,11 @@ def generate(
                     else:
                         logger.warning("No questions generated, proceeding with resume creation.")
 
+        # ============================================
+        # PHASE 1: Generate all local data first
+        # ============================================
+
+        # Generate or load resume data
         resume_path = job_dir / "resume.json"
 
         if not force and resume_path.exists():
@@ -251,7 +254,6 @@ def generate(
             if verbose and not debug:
                 logger.success("Using cached resume data")
         else:
-            click.echo("\n📝 Generating tailored resume...")
             resume_data = ollama.generate_resume(
                 job_data,
                 profile,
@@ -271,14 +273,49 @@ def generate(
             output_path.write_text(json.dumps(final_resume, indent=2))
             click.echo(f"   Saved JSON to {output}")
 
+        # Generate or load cover letter data
+        cover_letter_data = None
+        final_cover_letter = None
+
+        if not skip_cover_letter:
+            base_cl = load_base_cover_letter(base_cover_letter)
+            cover_letter_path = job_dir / "cover_letter.json"
+
+            if not force and cover_letter_path.exists():
+                cover_letter_data = cache.get_cached_cover_letter(job_dir)
+                logger.cache_hit("cover_letter", str(cover_letter_path))
+                if verbose and not debug:
+                    logger.success("Using cached cover letter data")
+
+            if not cover_letter_data:
+                cover_letter_data = ollama.generate_cover_letter(
+                    job_data,
+                    profile,
+                    questions=questions if questions else None,
+                    answers=answers if answers else None,
+                    output_path=str(job_dir / "debug_cover_letter_output.json"),
+                )
+                cache.save_cover_letter(job_dir, cover_letter_data)
+                logger.cache_save("cover_letter", str(cover_letter_path))
+                if verbose and not debug:
+                    click.echo("   💾 Saved: cover_letter.json")
+
+            final_cover_letter = merge_cover_letter_with_base(
+                cover_letter_data, profile, base_cl, job_title, company
+            )
+
+        # ============================================
+        # PHASE 2: Create/update in Reactive Resume
+        # ============================================
+
         resume_title = f"{job_title} at {company} Resume"
 
         # Check for existing resume
-        existing_id = check_existing_resume(
+        existing_resume_id = check_existing_document(
             rr_client, cache, job_dir, resume_title, overwrite_resume
         )
 
-        if existing_id and not overwrite_resume:
+        if existing_resume_id and not overwrite_resume:
             logger.error(f"Resume '{resume_title}' already exists")
             click.echo(
                 click.style(
@@ -296,12 +333,12 @@ def generate(
                 f"Resume '{resume_title}' already exists. Use --overwrite-resume to overwrite."
             )
 
-        # Add notes with URL and description
+        # Add notes with URL and description to resume
         final_resume["metadata"]["notes"] = f"{url}\n\n{job_description}"
 
         click.echo("\n🚀 Creating resume in Reactive Resume...")
 
-        # Create resume with title
+        # Create resume with title and company tag
         resume_id = rr_client.create_resume(resume_title, tags=[company])
 
         # Update with data
@@ -320,40 +357,12 @@ def generate(
         resume_url = rr_client.get_resume_url(resume_id)
         logger.success(f"Resume created: {resume_url}")
 
-        # Generate cover letter
-        if not skip_cover_letter:
-            base_cl = load_base_cover_letter(base_cover_letter)
-            cover_letter_path = job_dir / "cover_letter.json"
-            cover_letter_data = None
-
-            if not force and cover_letter_path.exists():
-                cover_letter_data = cache.get_cached_cover_letter(job_dir)
-                logger.cache_hit("cover_letter", str(cover_letter_path))
-                if verbose and not debug:
-                    logger.success("Using cached cover letter data")
-
-            if not cover_letter_data:
-                click.echo("\n✍️  Generating cover letter...")
-                cover_letter_data = ollama.generate_cover_letter(
-                    job_data,
-                    profile,
-                    questions=questions if questions else None,
-                    answers=answers if answers else None,
-                    output_path=str(job_dir / "debug_cover_letter_output.json"),
-                )
-                cache.save_cover_letter(job_dir, cover_letter_data)
-                logger.cache_save("cover_letter", str(cover_letter_path))
-                if verbose and not debug:
-                    click.echo("   💾 Saved: cover_letter.json")
-
-            final_cover_letter = merge_cover_letter_with_base(
-                cover_letter_data, profile, base_cl, job_title, company
-            )
-
+        # Create cover letter if requested
+        if not skip_cover_letter and final_cover_letter:
             cover_letter_title = f"{job_title} at {company} Cover Letter"
 
-            # Check for existing cover letter
-            existing_cl_id = check_existing_resume(
+            # Check for existing cover letter (using same helper but different title)
+            existing_cl_id = check_existing_document(
                 rr_client, cache, job_dir, cover_letter_title, overwrite_resume
             )
 
@@ -364,11 +373,12 @@ def generate(
                     "Use --overwrite-resume to overwrite."
                 )
 
+            # Add notes with URL and description to cover letter
             final_cover_letter["metadata"]["notes"] = f"{url}\n\n{job_description}"
 
             click.echo("\n🚀 Creating cover letter in Reactive Resume...")
 
-            # Create cover letter with unique slug prefix
+            # Create cover letter with unique slug prefix to avoid collision with resume
             cover_letter_id = rr_client.create_resume(
                 cover_letter_title, tags=[company], slug_prefix="cl"
             )
