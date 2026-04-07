@@ -717,5 +717,100 @@ def status_command(config_path: str | None) -> None:
         raise click.ClickException(f"Error checking status: {e}")
 
 
+@main.command()
+@click.option("--host", default="0.0.0.0", help="Host to bind to")
+@click.option("--port", default=8000, type=int, help="Port to bind to")
+@click.option("--config", "-c", default=None, help="Config file path")
+def serve(host: str, port: int, config: str | None) -> None:
+    """Start Fast-App web server.
+
+    Launches a web interface for generating resumes.
+    Checks connections and configuration before starting.
+    """
+    import uvicorn
+    from pathlib import Path
+
+    try:
+        # Load configuration
+        config_obj = load_config(config)
+
+        # Validate connections
+        click.echo("🔍 Validating connections...\n")
+
+        # Check Ollama
+        ollama = OllamaService(config_obj.ollama)
+        click.echo("Checking Ollama...")
+        if not ollama.check_connection():
+            click.echo(click.style("❌ Cannot connect to Ollama", fg="red"))
+            click.echo(f"   Ensure Ollama is running at: {config_obj.ollama.endpoint}")
+            raise SystemExit(1)
+        click.echo(click.style(f"✅ Ollama connected ({config_obj.ollama.endpoint})", fg="green"))
+
+        if not ollama.check_model_available():
+            click.echo(f"⚠️  Model '{config_obj.ollama.model}' not available")
+            click.echo(f"   Run: ollama pull {config_obj.ollama.model}")
+        else:
+            click.echo(f"✅ Model '{config_obj.ollama.model}' available")
+
+        click.echo()
+
+        # Check Reactive Resume
+        rr_client = ReactiveResumeClient(config_obj.resume.endpoint, config_obj.resume.api_key)
+        click.echo("Checking Reactive Resume...")
+        if not rr_client.test_connection():
+            click.echo(click.style("❌ Cannot connect to Reactive Resume", fg="red"))
+            click.echo(f"   Ensure Reactive Resume is running at: {config_obj.resume.endpoint}")
+            raise SystemExit(1)
+        click.echo(
+            click.style(f"✅ Reactive Resume connected ({config_obj.resume.endpoint})", fg="green")
+        )
+
+        if not config_obj.resume.api_key:
+            click.echo("⚠️  No API key configured")
+            click.echo("   Set RESUME_API_KEY environment variable or add to config.json")
+        else:
+            click.echo("✅ API key configured")
+
+        click.echo()
+
+        # Check required files
+        click.echo("Checking configuration files...")
+
+        required_files = [
+            ("config.json", config),
+            ("profile.json", None),
+            ("base-resume.json", None),
+            ("base-cover-letter.json", None),
+        ]
+
+        for filename, custom_path in required_files:
+            file_path = Path(custom_path) if custom_path else Path(filename)
+            if not file_path.exists():
+                click.echo(click.style(f"❌ Missing {filename}", fg="red"))
+                click.echo(f"   Create {filename} in the current directory")
+                raise SystemExit(1)
+            click.echo(f"✅ Found {filename}")
+
+        click.echo()
+        click.echo(click.style("=" * 60, fg="cyan"))
+        click.echo(click.style(f"🚀 Fast-App server starting", fg="green", bold=True))
+        click.echo(click.style(f"   http://{host}:{port}", fg="cyan"))
+        click.echo(click.style("=" * 60, fg="cyan"))
+        click.echo()
+
+        # Import and run app
+        from .webapp.app import app as webapp
+
+        # Configure uvicorn
+        uvicorn.run(webapp, host=host, port=port, log_level="info", access_log=False)
+
+    except FileNotFoundError as e:
+        logger.error(str(e))
+        raise click.ClickException(str(e))
+    except Exception as e:
+        logger.error(f"Server error: {e}")
+        raise click.ClickException(f"Server error: {e}")
+
+
 if __name__ == "__main__":
     main()

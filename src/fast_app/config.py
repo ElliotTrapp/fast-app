@@ -58,11 +58,26 @@ class Config:
     @classmethod
     def from_file(cls, path: str) -> "Config":
         file_path = Path(path).expanduser()
-        if not file_path.exists():
-            raise FileNotFoundError(f"Config file not found: {file_path}")
 
-        data = json.loads(file_path.read_text())
-        return cls.from_dict(data)
+        if not file_path.exists():
+            raise FileNotFoundError(f"Config file not found: {path}")
+
+        with open(file_path) as f:
+            data = json.load(f)
+
+        config = cls.from_dict(data)
+
+        # Override with environment variables if set
+        if os.environ.get("OLLAMA_ENDPOINT"):
+            config.ollama.endpoint = os.environ["OLLAMA_ENDPOINT"]
+        if os.environ.get("OLLAMA_MODEL"):
+            config.ollama.model = os.environ["OLLAMA_MODEL"]
+        if os.environ.get("RESUME_ENDPOINT"):
+            config.resume.endpoint = os.environ["RESUME_ENDPOINT"]
+        if os.environ.get("RESUME_API_KEY"):
+            config.resume.api_key = os.environ["RESUME_API_KEY"]
+
+        return config
 
 
 def find_config_file(cli_path: str | None = None) -> Path:
