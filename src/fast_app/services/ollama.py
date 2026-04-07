@@ -11,16 +11,12 @@ import requests
 from ollama import Client
 from progress.spinner import Spinner
 
-from ..models import ResumeData
+from ..models import ResumeData, CoverLetterData
 from ..prompts.resume import get_resume_prompt
 from ..prompts.questions import get_questions_prompt, QuestionList
 from ..prompts.cover_letter import get_cover_letter_prompt
 from ..config import OllamaConfig
 from ..log import logger
-from ..models import ResumeData
-from ..prompts.cover_letter import get_cover_letter_prompt
-from ..prompts.questions import QuestionList, get_questions_prompt
-from ..prompts.resume import get_resume_prompt
 
 
 def with_retry(
@@ -419,14 +415,7 @@ class OllamaService:
             self.client.chat,
             model=self.config.model,
             messages=[{"role": "user", "content": prompt}],
-            format={
-                "type": "object",
-                "properties": {
-                    "recipient": {"type": "string"},
-                    "content": {"type": "string"},
-                },
-                "required": ["recipient", "content"],
-            },
+            format=CoverLetterData.model_json_schema(),
             think=False,
             options={"temperature": 0.7, "num_predict": 2000},
         )
@@ -437,8 +426,9 @@ class OllamaService:
         logger.llm_response(len(cleaned))
 
         try:
-            cover_letter_data = json.loads(cleaned)
-        except json.JSONDecodeError as e:
+            cover_letter_model = CoverLetterData.model_validate_json(cleaned)
+            cover_letter_data = cover_letter_model.model_dump()
+        except (json.JSONDecodeError, Exception) as e:
             Path(output_path).write_text(cleaned)
             logger.error(f"Failed to parse cover letter JSON: {e}")
             logger.warning(f"Raw output saved to {output_path}")
@@ -449,7 +439,7 @@ class OllamaService:
                 f"  Try again or use a different model."
             ) from e
 
-        if "recipient" not in cover_letter_data or "content" not in cover_letter_data:
+        if not cover_letter_data.get("recipient") or not cover_letter_data.get("content"):
             Path(output_path).write_text(cleaned)
             logger.error("Missing required fields in cover letter response")
             logger.warning(f"Raw output saved to {output_path}")

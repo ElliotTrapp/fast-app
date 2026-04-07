@@ -394,7 +394,7 @@ def generate(
                 import json
 
                 click.echo("\n📝 Final cover letter structure:")
-                click.echo(json.dumps(final_cover_letter.get("summary", {}), indent=2)[:500])
+                click.echo(json.dumps(final_cover_letter, indent=2))
 
             click.echo("\n🚀 Creating cover letter in Reactive Resume...")
 

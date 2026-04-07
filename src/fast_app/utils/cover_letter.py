@@ -1,6 +1,7 @@
 """Cover letter specific utilities."""
 
 import copy
+import uuid
 from typing import Any
 
 import click
@@ -35,39 +36,105 @@ def merge_cover_letter_with_base(
     """
     # Extract the actual cover letter text - validate it exists
     cover_letter_content = generated.get("content", "")
+    recipient = generated.get("recipient", "")
 
     if not cover_letter_content or not cover_letter_content.strip():
         raise ValueError(
             f"Cover letter content is empty. Generated data keys: {list(generated.keys())}"
         )
 
+    # Generate UUIDs for the custom section and its item
+    section_id = str(uuid.uuid4())
+    item_id = str(uuid.uuid4())
+
     if not base:
-        # Create minimal structure with all required fields for Reactive Resume
+        # Create minimal structure with custom section for cover letter
         return {
             "basics": profile.get("basics", {}),
-            "summary": {
-                "title": f"Cover Letter for {job_title} at {company}",
-                "content": cover_letter_content,
-                "columns": 1,
-                "hidden": False,
-            },
+            "summary": {"content": "", "columns": 1, "hidden": True},
             "sections": {},
-            "metadata": {"notes": f"Cover letter for {job_title} position at {company}"},
+            "customSections": [
+                {
+                    "title": "Cover Letter",
+                    "columns": 1,
+                    "hidden": False,
+                    "id": section_id,
+                    "type": "cover-letter",
+                    "items": [
+                        {
+                            "id": item_id,
+                            "hidden": False,
+                            "recipient": recipient,
+                            "content": cover_letter_content,
+                        }
+                    ],
+                }
+            ],
+            "metadata": {
+                "notes": f"Cover letter for {job_title} position at {company}",
+                "layout": {"pages": [{"fullWidth": True, "main": [section_id], "sidebar": []}]},
+            },
         }
 
     result = copy.deepcopy(base)
 
-    # Override summary content with cover letter
-    result["summary"] = {
-        "title": f"Cover Letter for {job_title} at {company}",
-        "content": cover_letter_content,
-        "columns": base.get("summary", {}).get("columns", 1),
-        "hidden": False,
-    }
+    # Populate basics from profile
+    result["basics"] = profile.get("basics", {})
 
-    # Preserve metadata from base if exists
-    if "metadata" in base:
-        result.setdefault("metadata", base["metadata"])
+    # Find and update the Cover Letter custom section
+    custom_sections = result.get("customSections", [])
+    cover_letter_section_idx = None
+
+    for idx, section in enumerate(custom_sections):
+        if section.get("type") == "cover-letter" or section.get("title") == "Cover Letter":
+            cover_letter_section_idx = idx
+            break
+
+    if cover_letter_section_idx is not None:
+        # Update existing cover letter section with generated IDs
+        result["customSections"][cover_letter_section_idx]["id"] = section_id
+        result["customSections"][cover_letter_section_idx]["items"][0]["id"] = item_id
+        result["customSections"][cover_letter_section_idx]["items"][0]["recipient"] = recipient
+        result["customSections"][cover_letter_section_idx]["items"][0]["content"] = (
+            cover_letter_content
+        )
+    else:
+        # Add new cover letter section
+        result.setdefault("customSections", []).append(
+            {
+                "title": "Cover Letter",
+                "columns": 1,
+                "hidden": False,
+                "id": section_id,
+                "type": "cover-letter",
+                "items": [
+                    {
+                        "id": item_id,
+                        "hidden": False,
+                        "recipient": recipient,
+                        "content": cover_letter_content,
+                    }
+                ],
+            }
+        )
+
+    # Add the custom section to the layout pages
+    metadata = result.get("metadata", {})
+    layout = metadata.get("layout", {})
+    pages = layout.get("pages", [])
+
+    if pages:
+        # Add section ID to first page's main section if not already there
+        main = pages[0].get("main", [])
+        if section_id not in main:
+            main.append(section_id)
+            pages[0]["main"] = main
+    else:
+        # Create default page with custom section
+        pages = [{"fullWidth": True, "main": [section_id], "sidebar": []}]
+
+    # Update metadata
+    result.setdefault("metadata", {})["layout"] = {"pages": pages}
 
     return result
 

@@ -2,6 +2,7 @@
 
 from fast_app.models import (
     Basics,
+    CoverLetterData,
     EducationItem,
     ExperienceItem,
     ResumeData,
@@ -11,6 +12,7 @@ from fast_app.models import (
 )
 from fast_app.prompts.questions import QuestionList, get_questions_prompt
 from fast_app.prompts.resume import get_resume_prompt
+from fast_app.prompts.cover_letter import get_cover_letter_prompt
 
 
 class TestGetResumePrompt:
@@ -248,3 +250,26 @@ class TestEducationItem:
     def test_with_data(self):
         edu = EducationItem(school="MIT", degree="BS Computer Science", location="Cambridge, MA")
         assert edu.school == "MIT"
+
+
+class TestCoverLetterData:
+    def test_defaults(self):
+        cl = CoverLetterData()
+        assert cl.recipient == ""
+        assert cl.content == ""
+
+    def test_with_data(self):
+        cl = CoverLetterData(
+            recipient="<p>Dear Hiring Manager,</p>",
+            content="<p>Cover letter body...</p>",
+        )
+        assert cl.recipient == "<p>Dear Hiring Manager,</p>"
+        assert "Cover letter body" in cl.content
+
+    def test_model_json_schema(self):
+        schema = CoverLetterData.model_json_schema()
+        assert "recipient" in schema["properties"]
+        assert "content" in schema["properties"]
+        # These have defaults, so they're not required
+        assert "recipient" in schema["properties"]
+        assert "content" in schema["properties"]

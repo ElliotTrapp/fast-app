@@ -2,6 +2,8 @@
 
 from typing import Any
 
+from ..models import CoverLetterData
+
 
 def get_cover_letter_prompt(
     job_data: dict[str, Any],
@@ -61,12 +63,10 @@ def get_cover_letter_prompt(
 - Each paragraph should be wrapped in <p>...</p> tags
 - End with "Sincerely,</p><p>{candidate_name}</p>"
 
-## Output Format
-Return a JSON object with two fields:
-- "recipient": Opening line in HTML like "<p>Dear Company Team,</p>"
-- "content": The full cover letter body in HTML format with <p> tags for paragraphs, <strong> tags for section headers, and proper signature
+## Critical Constraint
+Return ONLY valid JSON matching this schema. No additional text outside the JSON.
 
-Example content structure:
-"<p>Opening paragraph that hooks the reader...</p><p><strong>Why This Role Appeals to Me</strong></p><p>Explanation of why the role and company are appealing...</p><p><strong>Relevant Experience</strong></p><p>Highlighting specific achievements...</p><p><strong>What I Bring</strong></p><p>Key strengths and value...</p><p>Thank you for considering my application. I would welcome the opportunity to discuss how my experience could contribute to the team's mission.</p><p>Sincerely,</p><p>{candidate_name}</p>"
+## Schema Overview
+{CoverLetterData.model_json_schema()}
 
-Return only valid JSON."""
+Return valid JSON matching the CoverLetterData schema exactly."""

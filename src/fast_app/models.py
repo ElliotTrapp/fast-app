@@ -262,6 +262,22 @@ class ReferenceSection(BaseModel):
     items: list[ReferenceItem] = Field(default_factory=list)
 
 
+class CoverLetterItem(BaseModel):
+    id: str = Field(default_factory=generate_id)
+    hidden: bool = False
+    recipient: str = ""
+    content: str = ""
+
+
+class CoverLetterSection(BaseModel):
+    title: str = "Cover Letter"
+    columns: int = 1
+    hidden: bool = False
+    id: str = Field(default_factory=generate_id)
+    type: str = "cover-letter"
+    items: list[CoverLetterItem] = Field(default_factory=list)
+
+
 class Sections(BaseModel):
     profiles: ProfileSection = Field(default_factory=ProfileSection)
     experience: ExperienceSection = Field(default_factory=ExperienceSection)
@@ -358,6 +374,13 @@ class Metadata(BaseModel):
         }
     )
     notes: str = ""
+
+
+class CoverLetterData(BaseModel):
+    """Generated cover letter data from LLM."""
+
+    recipient: str = ""
+    content: str = ""
 
 
 class ResumeData(BaseModel):
