@@ -376,20 +376,40 @@ class Metadata(BaseModel):
     notes: str = ""
 
 
-class CoverLetterData(BaseModel):
-    """Generated cover letter data from LLM."""
-
-    recipient: str = ""
-    content: str = ""
-
-
-class QuestionData(BaseModel):
+class QuestionContent(BaseModel):
     """Generated questions from LLM."""
 
     questions: list[str] = Field(default_factory=list)
 
 
+class ResumeContent(BaseModel):
+    """Generated resume content from LLM - only what we ask the LLM for."""
+
+    summary: Summary = Field(default_factory=Summary)
+    sections: Sections = Field(default_factory=Sections)
+
+
 class ResumeData(BaseModel):
+    """Full resume document ready for Reactive Resume."""
+
+    picture: Picture = Field(default_factory=Picture)
+    basics: Basics = Field(default_factory=Basics)
+    summary: Summary = Field(default_factory=Summary)
+    sections: Sections = Field(default_factory=Sections)
+    customSections: list[Any] = Field(default_factory=list)
+    metadata: Metadata = Field(default_factory=Metadata)
+
+
+class CoverLetterContent(BaseModel):
+    """Generated cover letter content from LLM - only what we ask the LLM for."""
+
+    recipient: str = ""
+    content: str = ""
+
+
+class CoverLetterData(BaseModel):
+    """Full cover letter document ready for Reactive Resume."""
+
     picture: Picture = Field(default_factory=Picture)
     basics: Basics = Field(default_factory=Basics)
     summary: Summary = Field(default_factory=Summary)

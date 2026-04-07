@@ -1,12 +1,14 @@
 """Cover letter specific utilities."""
 
 import copy
+import json
 import uuid
 from typing import Any
 
 import click
 
 from ..log import logger
+from ..models import CoverLetterData
 
 
 def merge_cover_letter_with_base(
@@ -32,7 +34,7 @@ def merge_cover_letter_with_base(
         Merged cover letter data ready for Reactive Resume
 
     Raises:
-        ValueError: If content is missing or empty
+        ValueError: If content is missing, empty, or validation fails
     """
     # Extract the actual cover letter text - validate it exists
     cover_letter_content = generated.get("content", "")
@@ -49,7 +51,7 @@ def merge_cover_letter_with_base(
 
     if not base:
         # Create minimal structure with custom section for cover letter
-        return {
+        result = {
             "basics": profile.get("basics", {}),
             "summary": {"content": "", "columns": 1, "hidden": True},
             "sections": {},
@@ -75,68 +77,97 @@ def merge_cover_letter_with_base(
                 "layout": {"pages": [{"fullWidth": True, "main": [section_id], "sidebar": []}]},
             },
         }
-
-    result = copy.deepcopy(base)
-
-    # Populate basics from profile
-    result["basics"] = profile.get("basics", {})
-
-    # Find and update the Cover Letter custom section
-    custom_sections = result.get("customSections", [])
-    cover_letter_section_idx = None
-
-    for idx, section in enumerate(custom_sections):
-        if section.get("type") == "cover-letter" or section.get("title") == "Cover Letter":
-            cover_letter_section_idx = idx
-            break
-
-    if cover_letter_section_idx is not None:
-        # Update existing cover letter section with generated IDs
-        result["customSections"][cover_letter_section_idx]["id"] = section_id
-        result["customSections"][cover_letter_section_idx]["items"][0]["id"] = item_id
-        result["customSections"][cover_letter_section_idx]["items"][0]["recipient"] = recipient
-        result["customSections"][cover_letter_section_idx]["items"][0]["content"] = (
-            cover_letter_content
-        )
     else:
-        # Add new cover letter section
-        result.setdefault("customSections", []).append(
-            {
-                "title": "Cover Letter",
-                "columns": 1,
-                "hidden": False,
-                "id": section_id,
-                "type": "cover-letter",
-                "items": [
-                    {
-                        "id": item_id,
-                        "hidden": False,
-                        "recipient": recipient,
-                        "content": cover_letter_content,
-                    }
-                ],
-            }
-        )
+        result = copy.deepcopy(base)
 
-    # Add the custom section to the layout pages
-    metadata = result.get("metadata", {})
-    layout = metadata.get("layout", {})
-    pages = layout.get("pages", [])
+        # Populate basics from profile
+        result["basics"] = profile.get("basics", {})
 
-    if pages:
-        # Add section ID to first page's main section if not already there
-        main = pages[0].get("main", [])
-        if section_id not in main:
-            main.append(section_id)
-            pages[0]["main"] = main
-    else:
-        # Create default page with custom section
-        pages = [{"fullWidth": True, "main": [section_id], "sidebar": []}]
+        # Find and update the Cover Letter custom section
+        custom_sections = result.get("customSections", [])
+        cover_letter_section_idx = None
 
-    # Update metadata
-    result.setdefault("metadata", {})["layout"] = {"pages": pages}
+        for idx, section in enumerate(custom_sections):
+            if section.get("type") == "cover-letter" or section.get("title") == "Cover Letter":
+                cover_letter_section_idx = idx
+                break
 
-    return result
+        if cover_letter_section_idx is not None:
+            # Update existing cover letter section with generated IDs
+            result["customSections"][cover_letter_section_idx]["id"] = section_id
+            result["customSections"][cover_letter_section_idx]["items"][0]["id"] = item_id
+            result["customSections"][cover_letter_section_idx]["items"][0]["recipient"] = recipient
+            result["customSections"][cover_letter_section_idx]["items"][0]["content"] = (
+                cover_letter_content
+            )
+        else:
+            # Add new cover letter section
+            result.setdefault("customSections", []).append(
+                {
+                    "title": "Cover Letter",
+                    "columns": 1,
+                    "hidden": False,
+                    "id": section_id,
+                    "type": "cover-letter",
+                    "items": [
+                        {
+                            "id": item_id,
+                            "hidden": False,
+                            "recipient": recipient,
+                            "content": cover_letter_content,
+                        }
+                    ],
+                }
+            )
+
+        # Add the custom section to the layout pages
+        metadata = result.get("metadata", {})
+        layout = metadata.get("layout", {})
+        pages = layout.get("pages", [])
+
+        if pages:
+            # Add section ID to first page's main section if not already there
+            main = pages[0].get("main", [])
+            if section_id not in main:
+                main.append(section_id)
+                pages[0]["main"] = main
+        else:
+            # Create default page with custom section
+            pages = [{"fullWidth": True, "main": [section_id], "sidebar": []}]
+
+        # Update metadata
+        result.setdefault("metadata", {})["layout"] = {"pages": pages}
+
+    # Validate the structure matches CoverLetterData schema
+    try:
+        validated = CoverLetterData.model_validate(result)
+        logger.success("Cover letter data validated successfully")
+        return validated.model_dump()
+    except Exception as e:
+        logger.error(f"Cover letter data validation failed: {e}")
+        click.echo(click.style("\n❌ Cover letter data validation failed:", fg="red"))
+        click.echo(click.style(f"   {str(e)}", fg="yellow"))
+
+        # Show what we have
+        click.echo(click.style("\n📊 Generated content:", fg="cyan"))
+        click.echo(f"   Recipient length: {len(recipient)}")
+        click.echo(f"   Content length: {len(cover_letter_content)}")
+
+        click.echo(click.style("\n📊 Profile data:", fg="cyan"))
+        click.echo(f"   Basics keys: {list(profile.get('basics', {}).keys())}")
+
+        if base:
+            click.echo(click.style("\n📊 Base template structure:", fg="cyan"))
+            click.echo(f"   Keys: {list(base.keys())}")
+            if "customSections" in base:
+                click.echo(f"   Custom sections: {len(base.get('customSections', []))}")
+
+        click.echo(click.style("\n📊 Merged result structure:", fg="cyan"))
+        click.echo(f"   Keys: {list(result.keys())}")
+        click.echo(f"   Has basics: {'basics' in result}")
+        click.echo(f"   Has customSections: {'customSections' in result}")
+
+        raise ValueError(f"Cover letter data validation failed: {e}") from e
 
 
 def check_existing_cover_letter(

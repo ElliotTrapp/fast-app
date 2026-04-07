@@ -246,7 +246,7 @@ def generate(
         # PHASE 1: Generate all local data first
         # ============================================
 
-        # Generate or load resume data
+        # Generate or load resume content from LLM
         resume_path = job_dir / "resume.json"
 
         if not force and resume_path.exists():
@@ -255,28 +255,33 @@ def generate(
             if verbose and not debug:
                 logger.success("Using cached resume data")
         else:
-            resume_data = ollama.generate_resume(
+            # Get content from LLM (only summary and sections)
+            resume_content = ollama.generate_resume(
                 job_data,
                 profile,
                 questions=questions if questions else None,
                 answers=answers if answers else None,
                 output_path=str(job_dir / "debug_llm_output.json"),
             )
+
+            # Merge with base template and profile to get full ResumeData
+            resume_data = merge_resume_with_base(resume_content, profile, base_resume)
+
+            # Cache the merged result
             cache.save_resume(job_dir, resume_data)
             logger.cache_save("resume", str(resume_path))
             if verbose and not debug:
                 click.echo("   💾 Saved: resume.json")
 
-        final_resume = merge_resume_with_base(resume_data, base_resume)
+        final_resume = resume_data
 
         if output:
             output_path = Path(output)
             output_path.write_text(json.dumps(final_resume, indent=2))
             click.echo(f"   Saved JSON to {output}")
 
-        # Generate or load cover letter data
+        # Generate or load cover letter content from LLM
         cover_letter_data = None
-        final_cover_letter = None
 
         if not skip_cover_letter:
             base_cl = load_base_cover_letter(base_cover_letter)
@@ -289,13 +294,21 @@ def generate(
                     logger.success("Using cached cover letter data")
 
             if not cover_letter_data:
-                cover_letter_data = ollama.generate_cover_letter(
+                # Get content from LLM (only recipient and content)
+                cover_letter_content = ollama.generate_cover_letter(
                     job_data,
                     profile,
                     questions=questions if questions else None,
                     answers=answers if answers else None,
                     output_path=str(job_dir / "debug_cover_letter_output.json"),
                 )
+
+                # Merge with base template and profile to get full CoverLetterData
+                cover_letter_data = merge_cover_letter_with_base(
+                    cover_letter_content, profile, base_cl, job_title, company
+                )
+
+                # Cache the merged result
                 cache.save_cover_letter(job_dir, cover_letter_data)
                 logger.cache_save("cover_letter", str(cover_letter_path))
                 if verbose and not debug:
@@ -304,13 +317,11 @@ def generate(
                 # Debug: Log the cover letter content
                 if debug:
                     click.echo(
-                        f"\n📝 Generated cover letter content length: {len(cover_letter_data.get('content', ''))}"
+                        f"\n📝 Generated cover letter content length: {len(cover_letter_content.get('content', ''))}"
                     )
-                    click.echo(f"📝 Cover letter keys: {list(cover_letter_data.keys())}")
+                    click.echo(f"📝 Cover letter content keys: {list(cover_letter_content.keys())}")
 
-            final_cover_letter = merge_cover_letter_with_base(
-                cover_letter_data, profile, base_cl, job_title, company
-            )
+            final_cover_letter = cover_letter_data
 
             # Debug: Log the merged cover letter
             if debug:
@@ -388,13 +399,6 @@ def generate(
 
             # Add notes with URL and description to cover letter
             final_cover_letter["metadata"]["notes"] = f"{url}\n\n{job_description}"
-
-            # Debug: Log what we're about to upload
-            if debug:
-                import json
-
-                click.echo("\n📝 Final cover letter structure:")
-                click.echo(json.dumps(final_cover_letter, indent=2))
 
             click.echo("\n🚀 Creating cover letter in Reactive Resume...")
 

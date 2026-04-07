@@ -2,10 +2,12 @@
 
 from fast_app.models import (
     Basics,
+    CoverLetterContent,
     CoverLetterData,
     EducationItem,
     ExperienceItem,
-    QuestionData,
+    QuestionContent,
+    ResumeContent,
     ResumeData,
     Sections,
     SkillItem,
@@ -110,16 +112,16 @@ class TestGetQuestionsPrompt:
 
 class TestQuestionDataModel:
     def test_empty_questions(self):
-        model = QuestionData()
+        model = QuestionContent()
         assert model.questions == []
 
     def test_with_questions(self):
-        model = QuestionData(questions=["Q1?", "Q2?"])
+        model = QuestionContent(questions=["Q1?", "Q2?"])
         assert len(model.questions) == 2
         assert model.questions[0] == "Q1?"
 
     def model_json_schema(self):
-        schema = QuestionData.model_json_schema()
+        schema = QuestionContent.model_json_schema()
         assert "properties" in schema
         assert "questions" in schema["properties"]
 
@@ -256,21 +258,57 @@ class TestEducationItem:
 class TestCoverLetterData:
     def test_defaults(self):
         cl = CoverLetterData()
-        assert cl.recipient == ""
-        assert cl.content == ""
-
-    def test_with_data(self):
-        cl = CoverLetterData(
-            recipient="<p>Dear Hiring Manager,</p>",
-            content="<p>Cover letter body...</p>",
-        )
-        assert cl.recipient == "<p>Dear Hiring Manager,</p>"
-        assert "Cover letter body" in cl.content
+        # CoverLetterData is the full document, inherits from ResumeData
+        assert cl.basics.name == ""
+        assert cl.summary.content == ""
+        assert len(cl.sections.experience.items) == 0
 
     def test_model_json_schema(self):
         schema = CoverLetterData.model_json_schema()
+        assert "properties" in schema
+        assert "basics" in schema["properties"]
+        assert "sections" in schema["properties"]
+
+
+class TestResumeContent:
+    def test_defaults(self):
+        rc = ResumeContent()
+        assert rc.summary.content == ""
+        assert len(rc.sections.experience.items) == 0
+
+    def test_with_data(self):
+        rc = ResumeContent(
+            summary=Summary(content="Experienced engineer"),
+            sections=Sections(),
+        )
+        assert rc.summary.content == "Experienced engineer"
+
+    def test_model_json_schema(self):
+        schema = ResumeContent.model_json_schema()
+        assert "properties" in schema
+        assert "summary" in schema["properties"]
+        assert "sections" in schema["properties"]
+        # Should NOT have basics, metadata, etc.
+        assert "basics" not in schema["properties"]
+
+
+class TestCoverLetterContent:
+    def test_defaults(self):
+        clc = CoverLetterContent()
+        assert clc.recipient == ""
+        assert clc.content == ""
+
+    def test_with_data(self):
+        clc = CoverLetterContent(
+            recipient="<p>Dear Hiring Manager,</p>",
+            content="<p>Cover letter body...</p>",
+        )
+        assert clc.recipient == "<p>Dear Hiring Manager,</p>"
+        assert "Cover letter body" in clc.content
+
+    def test_model_json_schema(self):
+        schema = CoverLetterContent.model_json_schema()
         assert "recipient" in schema["properties"]
         assert "content" in schema["properties"]
-        # These have defaults, so they're not required
-        assert "recipient" in schema["properties"]
-        assert "content" in schema["properties"]
+        # Should NOT have basics, metadata, etc.
+        assert "basics" not in schema["properties"]

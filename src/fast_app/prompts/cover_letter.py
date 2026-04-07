@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from ..models import CoverLetterData
+from ..models import CoverLetterContent
 
 
 def get_cover_letter_prompt(
@@ -67,6 +67,6 @@ def get_cover_letter_prompt(
 Return ONLY valid JSON matching this schema. No additional text outside the JSON.
 
 ## Schema Overview
-{CoverLetterData.model_json_schema()}
+{CoverLetterContent.model_json_schema()}
 
-Return valid JSON matching the CoverLetterData schema exactly."""
+Return valid JSON matching the CoverLetterContent schema exactly."""

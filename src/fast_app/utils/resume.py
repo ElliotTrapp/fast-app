@@ -1,53 +1,94 @@
 """Resume utility functions."""
 
 import copy
+import json
 from typing import Any
+
+import click
+
 from ..log import logger
+from ..models import ResumeData
 
 
 def merge_resume_with_base(
-    generated: dict[str, Any], base: dict[str, Any] | None
+    generated: dict[str, Any],
+    profile: dict[str, Any],
+    base: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    """Merge generated resume data with base template.
+    """Merge generated resume content with base template.
 
-    The base template provides styling/theme settings, generated data
-    provides the content.
+    The base template provides styling/theme settings.
+    Generated data provides summary and sections from LLM.
+    Profile provides basics (name, email, etc.).
 
     Args:
-        generated: Generated resume data from LLM
+        generated: Generated resume content from LLM (has 'summary' and 'sections')
+        profile: User profile data
         base: Base resume template (optional)
 
     Returns:
-        Merged resume data
+        Merged resume data ready for Reactive Resume
+
+    Raises:
+        ValueError: If merged data doesn't match ResumeData schema
     """
     if not base:
-        return generated
+        # Create minimal structure with basics from profile
+        result = {
+            "basics": profile.get("basics", {}),
+            "summary": generated.get("summary", {}),
+            "sections": generated.get("sections", {}),
+            "metadata": {},
+        }
+    else:
+        result = copy.deepcopy(base)
 
-    result = copy.deepcopy(base)
+        # Override basics with profile data
+        result["basics"] = profile.get("basics", {})
 
-    # Override basics with generated content
-    if "basics" in generated:
-        result["basics"] = generated["basics"]
+        # Override summary with generated content
+        if "summary" in generated:
+            result["summary"] = generated["summary"]
 
-    # Override summary with generated content
-    if "summary" in generated:
-        result["summary"] = generated["summary"]
+        # Override sections with generated content
+        if "sections" in generated:
+            result["sections"] = generated["sections"]
 
-    # Merge sections
-    if "sections" in generated:
-        for section_name, section_data in generated["sections"].items():
+        # Preserve columns from base template
+        for section_name, section_data in base.get("sections", {}).items():
             if section_name in result.get("sections", {}):
-                # Merge items, preferring generated content
-                result["sections"][section_name] = section_data
-            else:
-                # Add new section
-                result.setdefault("sections", {})[section_name] = section_data
+                if "columns" in section_data:
+                    result["sections"][section_name]["columns"] = section_data["columns"]
 
-    # Preserve metadata from base if exists
-    if "metadata" in base:
-        result.setdefault("metadata", base["metadata"])
+    # Validate the structure matches ResumeData schema
+    try:
+        validated = ResumeData.model_validate(result)
+        logger.success("Resume data validated successfully")
+        return validated.model_dump()
+    except Exception as e:
+        logger.error(f"Resume data validation failed: {e}")
+        click.echo(click.style("\n❌ Resume data validation failed:", fg="red"))
+        click.echo(click.style(f"   {str(e)}", fg="yellow"))
 
-    return result
+        # Show what we have
+        click.echo(click.style("\n📊 Generated data structure:", fg="cyan"))
+        click.echo(f"   Keys: {list(generated.keys())}")
+        click.echo(f"   Summary: {generated.get('summary', {})}")
+        click.echo(f"   Sections: {list(generated.get('sections', {}).keys())}")
+
+        click.echo(click.style("\n📊 Profile data:", fg="cyan"))
+        click.echo(f"   Basics keys: {list(profile.get('basics', {}).keys())}")
+
+        if base:
+            click.echo(click.style("\n📊 Base template structure:", fg="cyan"))
+            click.echo(f"   Keys: {list(base.keys())}")
+            if "sections" in base:
+                click.echo(f"   Section columns:")
+                for section_name, section_data in base.get("sections", {}).items():
+                    cols = section_data.get("columns", "not set")
+                    click.echo(f"     - {section_name}: {cols}")
+
+        raise ValueError(f"Resume data validation failed: {e}") from e
 
 
 def check_existing_resume(

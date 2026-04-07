@@ -3,7 +3,7 @@
 import json
 from typing import Any
 
-from ..models import ResumeData
+from ..models import ResumeContent
 
 
 def get_resume_prompt(
@@ -61,6 +61,6 @@ def get_resume_prompt(
 Return ONLY valid JSON matching this schema. No additional text outside the JSON.
 
 ## Schema Overview
-{ResumeData.model_json_schema()}
+{ResumeContent.model_json_schema()}
 
-Return valid JSON matching the ResumeData schema exactly."""
+Return valid JSON matching the ResumeContent schema exactly."""

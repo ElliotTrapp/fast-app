@@ -11,7 +11,7 @@ import requests
 from ollama import Client
 from progress.spinner import Spinner
 
-from ..models import ResumeData, CoverLetterData, QuestionData
+from ..models import ResumeContent, CoverLetterContent, QuestionContent
 from ..prompts.resume import get_resume_prompt
 from ..prompts.questions import get_questions_prompt
 from ..prompts.cover_letter import get_cover_letter_prompt
@@ -215,7 +215,7 @@ class OllamaService:
             self.client.chat,
             model=self.config.model,
             messages=[{"role": "user", "content": prompt}],
-            format=QuestionData.model_json_schema(),
+            format=QuestionContent.model_json_schema(),
             think=False,
             options={"temperature": 0.3, "num_predict": 1000},
         )
@@ -225,7 +225,7 @@ class OllamaService:
 
         logger.llm_response(len(cleaned))
 
-        question_data = QuestionData.model_validate_json(cleaned)
+        question_data = QuestionContent.model_validate_json(cleaned)
         questions = question_data.questions[:8]
 
         logger.llm_result("questions_parsed", {"count": len(questions)})
@@ -301,7 +301,7 @@ class OllamaService:
             self.client.chat,
             model=self.config.model,
             messages=[{"role": "user", "content": prompt}],
-            format=ResumeData.model_json_schema(),
+            format=ResumeContent.model_json_schema(),
             think=False,
             options={"temperature": 0.3, "num_predict": 5000},
         )
@@ -312,7 +312,7 @@ class OllamaService:
         logger.llm_response(len(cleaned))
 
         try:
-            resume_data = ResumeData.model_validate_json(cleaned).model_dump()
+            resume_content = ResumeContent.model_validate_json(cleaned).model_dump()
         except Exception as e:
             Path(output_path).write_text(cleaned)
             logger.error(f"Failed to generate valid resume: {e}")
@@ -327,17 +327,16 @@ class OllamaService:
         logger.llm_result(
             "resume",
             {
-                "name": resume_data.get("basics", {}).get("name", "Unknown"),
                 "experience_count": len(
-                    resume_data.get("sections", {}).get("experience", {}).get("items", [])
+                    resume_content.get("sections", {}).get("experience", {}).get("items", [])
                 ),
                 "skills_count": len(
-                    resume_data.get("sections", {}).get("skills", {}).get("items", [])
+                    resume_content.get("sections", {}).get("skills", {}).get("items", [])
                 ),
             },
         )
 
-        return resume_data
+        return resume_content
 
     @with_retry(max_retries=3, initial_delay=2.0)
     def generate_cover_letter(
@@ -358,7 +357,7 @@ class OllamaService:
             output_path: Path to save raw LLM output on error
 
         Returns:
-            Dict with 'recipient' and 'content' fields
+            Dict with 'recipient' and 'content' fields (CoverLetterContent)
 
         Raises:
             RuntimeError: If LLM fails to generate valid cover letter after retries
@@ -415,7 +414,7 @@ class OllamaService:
             self.client.chat,
             model=self.config.model,
             messages=[{"role": "user", "content": prompt}],
-            format=CoverLetterData.model_json_schema(),
+            format=CoverLetterContent.model_json_schema(),
             think=False,
             options={"temperature": 0.7, "num_predict": 2000},
         )
@@ -426,8 +425,7 @@ class OllamaService:
         logger.llm_response(len(cleaned))
 
         try:
-            cover_letter_model = CoverLetterData.model_validate_json(cleaned)
-            cover_letter_data = cover_letter_model.model_dump()
+            cover_letter_content = CoverLetterContent.model_validate_json(cleaned).model_dump()
         except (json.JSONDecodeError, Exception) as e:
             Path(output_path).write_text(cleaned)
             logger.error(f"Failed to parse cover letter JSON: {e}")
@@ -439,7 +437,7 @@ class OllamaService:
                 f"  Try again or use a different model."
             ) from e
 
-        if not cover_letter_data.get("recipient") or not cover_letter_data.get("content"):
+        if not cover_letter_content.get("recipient") or not cover_letter_content.get("content"):
             Path(output_path).write_text(cleaned)
             logger.error("Missing required fields in cover letter response")
             logger.warning(f"Raw output saved to {output_path}")
@@ -453,12 +451,12 @@ class OllamaService:
         logger.llm_result(
             "cover_letter",
             {
-                "recipient": cover_letter_data.get("recipient", ""),
-                "content_length": len(cover_letter_data.get("content", "")),
+                "recipient": cover_letter_content.get("recipient", ""),
+                "content_length": len(cover_letter_content.get("content", "")),
             },
         )
 
-        return cover_letter_data
+        return cover_letter_content
 
     @with_retry(max_retries=3, initial_delay=2.0)
     def generate_resume(

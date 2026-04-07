@@ -3,7 +3,7 @@
 import json
 from typing import Any
 
-from ..models import QuestionData
+from ..models import QuestionContent
 
 
 def get_questions_prompt(job_data: dict[str, Any], profile_data: dict[str, Any]) -> str:
@@ -49,11 +49,11 @@ Only ask questions that would meaningfully improve the resume quality. Skip ques
 Return ONLY valid JSON matching this schema. No additional text outside the JSON.
 
 ## Schema Overview
-{QuestionData.model_json_schema()}
+{QuestionContent.model_json_schema()}
 
 Return valid JSON matching the QuestionData schema exactly."""
 
 
 def get_questions_schema() -> dict:
     """Return the JSON schema for question responses."""
-    return QuestionData.model_json_schema()
+    return QuestionContent.model_json_schema()
