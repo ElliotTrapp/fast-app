@@ -5,12 +5,13 @@ from fast_app.models import (
     CoverLetterData,
     EducationItem,
     ExperienceItem,
+    QuestionData,
     ResumeData,
     Sections,
     SkillItem,
     Summary,
 )
-from fast_app.prompts.questions import QuestionList, get_questions_prompt
+from fast_app.prompts.questions import get_questions_prompt
 from fast_app.prompts.resume import get_resume_prompt
 from fast_app.prompts.cover_letter import get_cover_letter_prompt
 
@@ -107,18 +108,18 @@ class TestGetQuestionsPrompt:
         assert "Jane Doe" in prompt
 
 
-class TestQuestionListModel:
+class TestQuestionDataModel:
     def test_empty_questions(self):
-        model = QuestionList()
+        model = QuestionData()
         assert model.questions == []
 
     def test_with_questions(self):
-        model = QuestionList(questions=["Q1?", "Q2?"])
+        model = QuestionData(questions=["Q1?", "Q2?"])
         assert len(model.questions) == 2
         assert model.questions[0] == "Q1?"
 
     def model_json_schema(self):
-        schema = QuestionList.model_json_schema()
+        schema = QuestionData.model_json_schema()
         assert "properties" in schema
         assert "questions" in schema["properties"]
 

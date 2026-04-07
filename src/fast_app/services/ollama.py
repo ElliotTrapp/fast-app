@@ -11,9 +11,9 @@ import requests
 from ollama import Client
 from progress.spinner import Spinner
 
-from ..models import ResumeData, CoverLetterData
+from ..models import ResumeData, CoverLetterData, QuestionData
 from ..prompts.resume import get_resume_prompt
-from ..prompts.questions import get_questions_prompt, QuestionList
+from ..prompts.questions import get_questions_prompt
 from ..prompts.cover_letter import get_cover_letter_prompt
 from ..config import OllamaConfig
 from ..log import logger
@@ -215,7 +215,7 @@ class OllamaService:
             self.client.chat,
             model=self.config.model,
             messages=[{"role": "user", "content": prompt}],
-            format=QuestionList.model_json_schema(),
+            format=QuestionData.model_json_schema(),
             think=False,
             options={"temperature": 0.3, "num_predict": 1000},
         )
@@ -225,8 +225,8 @@ class OllamaService:
 
         logger.llm_response(len(cleaned))
 
-        question_list = QuestionList.model_validate_json(cleaned)
-        questions = question_list.questions[:8]
+        question_data = QuestionData.model_validate_json(cleaned)
+        questions = question_data.questions[:8]
 
         logger.llm_result("questions_parsed", {"count": len(questions)})
         for i, q in enumerate(questions, 1):

@@ -383,6 +383,12 @@ class CoverLetterData(BaseModel):
     content: str = ""
 
 
+class QuestionData(BaseModel):
+    """Generated questions from LLM."""
+
+    questions: list[str] = Field(default_factory=list)
+
+
 class ResumeData(BaseModel):
     picture: Picture = Field(default_factory=Picture)
     basics: Basics = Field(default_factory=Basics)

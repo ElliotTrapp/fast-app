@@ -3,11 +3,7 @@
 import json
 from typing import Any
 
-from pydantic import BaseModel
-
-
-class QuestionList(BaseModel):
-    questions: list[str] = []
+from ..models import QuestionData
 
 
 def get_questions_prompt(job_data: dict[str, Any], profile_data: dict[str, Any]) -> str:
@@ -49,13 +45,15 @@ Focus on:
 
 Only ask questions that would meaningfully improve the resume quality. Skip questions where the answer would be obvious from the profile or job description.
 
-Return a JSON object with a "questions" array containing the question strings.
+## Critical Constraint
+Return ONLY valid JSON matching this schema. No additional text outside the JSON.
 
-## Schema
-{{"questions": ["question 1", "question 2", ...]}}
-"""
+## Schema Overview
+{QuestionData.model_json_schema()}
+
+Return valid JSON matching the QuestionData schema exactly."""
 
 
 def get_questions_schema() -> dict:
     """Return the JSON schema for question responses."""
-    return QuestionList.model_json_schema()
+    return QuestionData.model_json_schema()
