@@ -19,6 +19,7 @@ const skipBtn = document.getElementById('skip-btn');
 const submitAnswerBtn = document.getElementById('submit-answer-btn');
 const retryBtn = document.getElementById('retry-btn');
 const newJobBtn = document.getElementById('new-job-btn');
+const cancelBtns = document.querySelectorAll('#cancel-btn');
 
 const jobUrlInput = document.getElementById('job-url');
 const forceCheckbox = document.getElementById('force');
@@ -408,6 +409,47 @@ retryBtn.addEventListener('click', () => {
     submissionForm.hidden = false;
     submitBtn.disabled = false;
     submitBtn.textContent = 'Generate Resume';
+});
+
+// Cancel - return to main menu with confirmation
+cancelBtns.forEach(btn => {
+    btn.addEventListener('click', async () => {
+        if (!confirm('Are you sure you want to cancel? This will return to the main menu and clear the current job.')) {
+            return;
+        }
+        
+        try {
+            // Stop polling
+            stopStatusPolling();
+            
+            // Clear timeout if active
+            if (questionTimeoutInterval) {
+                clearInterval(questionTimeoutInterval);
+                questionTimeoutInterval = null;
+            }
+            
+            // Reset server state
+            await fetch('/api/reset', { method: 'POST' });
+            
+            // Hide all modals and progress
+            submissionForm.hidden = false;
+            progressArea.hidden = true;
+            questionModal.hidden = true;
+            results.hidden = true;
+            errorBox.hidden = true;
+            
+            // Reset UI
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Generate Resume';
+            logOutput.innerHTML = '';
+            answerInput.value = '';
+            timeoutWarning.hidden = true;
+            
+        } catch (error) {
+            console.error('Failed to cancel:', error);
+            alert('Failed to cancel. Please try refreshing the page.');
+        }
+    });
 });
 
 // New job

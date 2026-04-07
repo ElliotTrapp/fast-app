@@ -62,6 +62,10 @@
             <div id="log-output" class="logs">
                 <!-- Logs will be streamed here -->
             </div>
+
+            <div class="buttons">
+                <button id="cancel-btn" class="btn-danger">Cancel</button>
+            </div>
         </div>
 
         <!-- Question Modal (hidden initially) -->
@@ -74,6 +78,7 @@
                 <p id="question-text" class="question-text"></p>
                 <textarea id="answer-input" placeholder="Type your answer..." rows="6"></textarea>
                 <div class="modal-buttons">
+                    <button id="cancel-btn" class="btn-danger">Cancel</button>
                     <button id="skip-btn" class="btn-secondary">Skip</button>
                     <button id="submit-answer-btn" class="btn-primary">Submit Answer</button>
                 </div>
@@ -101,7 +106,10 @@
                 <div class="error-details">
                     <pre id="error-trace"></pre>
                 </div>
-                <button id="retry-btn" class="btn-primary">Retry</button>
+                <div class="buttons">
+                    <button id="cancel-btn" class="btn-danger">Cancel</button>
+                    <button id="retry-btn" class="btn-primary">Retry</button>
+                </div>
             </div>
         </div>
     </div>

@@ -128,6 +128,15 @@ button {
     background: #e9ecef;
 }
 
+.btn-danger {
+    background: #dc3545;
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #c82333;
+}
+
 .btn-link {
     background: none;
     color: #667eea;
