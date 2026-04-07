@@ -1,6 +1,7 @@
 """State management for webapp job processing."""
 
 import json
+from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -40,6 +41,7 @@ class StateManager:
         self.questions: list[str] = []
         self.answers: list[str] = []
         self.current_question_index: int = 0
+        self.question_timeout_at: datetime | None = None
 
         # Results
         self.resume_url: str | None = None
@@ -73,6 +75,13 @@ class StateManager:
             self.answers = data.get("answers", [])
             self.current_question_index = data.get("current_question_index", 0)
 
+            # Parse timeout
+            timeout_str = data.get("question_timeout_at")
+            if timeout_str:
+                self.question_timeout_at = datetime.fromisoformat(timeout_str)
+            else:
+                self.question_timeout_at = None
+
             self.resume_url = data.get("resume_url")
             self.cover_letter_url = data.get("cover_letter_url")
             self.error_message = data.get("error_message")
@@ -99,6 +108,9 @@ class StateManager:
             "questions": self.questions,
             "answers": self.answers,
             "current_question_index": self.current_question_index,
+            "question_timeout_at": self.question_timeout_at.isoformat()
+            if self.question_timeout_at
+            else None,
             "resume_url": self.resume_url,
             "cover_letter_url": self.cover_letter_url,
             "error_message": self.error_message,
@@ -120,6 +132,7 @@ class StateManager:
         self.questions = []
         self.answers = []
         self.current_question_index = 0
+        self.question_timeout_at = None
         self.resume_url = None
         self.cover_letter_url = None
         self.error_message = None
@@ -150,6 +163,7 @@ class StateManager:
         self.questions = questions
         self.answers = []
         self.current_question_index = 0
+        self.question_timeout_at = datetime.now() + timedelta(minutes=10)
         self.current_step = f"Question 1 of {len(questions)}"
         self.progress = 0.4
         self.save()
@@ -164,6 +178,7 @@ class StateManager:
             self.state = JobState.PROCESSING
             self.current_step = "Generating resume"
             self.progress = 0.5
+            self.question_timeout_at = None
             self.save()
             return True
         else:
@@ -173,6 +188,25 @@ class StateManager:
             )
             self.save()
             return False
+
+    def check_timeout(self) -> bool:
+        """Check if question timeout expired. Returns True if timed out."""
+        if (
+            self.state == JobState.WAITING_QUESTIONS
+            and self.question_timeout_at
+            and datetime.now() > self.question_timeout_at
+        ):
+            # Fill remaining answers with empty strings
+            remaining = len(self.questions) - len(self.answers)
+            self.answers.extend([""] * remaining)
+
+            self.state = JobState.PROCESSING
+            self.current_step = "Generating resume (some questions skipped)"
+            self.progress = 0.5
+            self.question_timeout_at = None
+            self.save()
+            return True
+        return False
 
     def set_complete(self, resume_url: str, cover_letter_url: str | None) -> None:
         """Mark job as complete."""
@@ -202,6 +236,9 @@ class StateManager:
             "questions_count": len(self.questions),
             "questions_answered": len(self.answers),
             "current_question_index": self.current_question_index,
+            "question_timeout": self.question_timeout_at.isoformat()
+            if self.question_timeout_at
+            else None,
             "resume_url": self.resume_url,
             "cover_letter_url": self.cover_letter_url,
             "error": self.error_message,
@@ -210,8 +247,6 @@ class StateManager:
     def append_log(self, message: str) -> None:
         """Append a log message to the log file."""
         if self.log_file:
-            from datetime import datetime
-
             timestamp = datetime.now().isoformat()
             with open(self.log_file, "a") as f:
                 f.write(f"{timestamp} {message}\n")

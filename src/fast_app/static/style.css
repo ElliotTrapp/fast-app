@@ -139,16 +139,6 @@ button {
     color: #5568d3;
 }
 
-.btn-danger {
-    background: #dc3545;
-    color: white;
-}
-
-.btn-danger:hover {
-    background: #c82333;
-    transform: translateY(-1px);
-}
-
 /* Progress Area */
 .progress-container {
     margin: 30px 0;
