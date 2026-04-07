@@ -5,7 +5,7 @@ services:
       - "${PORT:-8000}:8000"
     environment:
       - OLLAMA_ENDPOINT=${OLLAMA_ENDPOINT:-http://192.168.1.2:11434}
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-glm-5:cloud}
       - RESUME_API_KEY=${RESUME_API_KEY}
       - RESUME_ENDPOINT=${RESUME_ENDPOINT:-http://reactive-resume:3000}
     volumes:
