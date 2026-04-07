@@ -46,7 +46,7 @@
 
             <div class="buttons">
                 <button id="submit-btn" class="btn-primary">Generate Resume</button>
-                <button id="reset-btn" class="btn-secondary">Reset</button>
+                <button id="stop-btn" class="btn-danger" hidden>Stop</button>
             </div>
         </div>
 
@@ -68,9 +68,6 @@
         <div id="question-modal" class="modal" hidden>
             <div class="modal-content">
                 <h3 id="question-title">Question <span id="q-num">1</span> of <span id="q-total">3</span></h3>
-                <div id="timeout-warning" class="timeout-warning" hidden>
-                    ⏱ Time remaining: <span id="time-remaining">10:00</span>
-                </div>
                 <p id="question-text" class="question-text"></p>
                 <textarea id="answer-input" placeholder="Type your answer..." rows="6"></textarea>
                 <div class="modal-buttons">

@@ -124,11 +124,6 @@ async def process_job(url: str, flags: dict[str, bool], state, broadcast_callbac
                 while state.state == JobState.WAITING_QUESTIONS:
                     await asyncio.sleep(0.5)
 
-                    # Check for timeout
-                    if state.check_timeout():
-                        logger.warning("Question timeout reached, using empty answers")
-                        break
-
                 answers = state.answers
 
                 # Save answers

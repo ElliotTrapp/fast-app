@@ -14,7 +14,7 @@ const results = document.getElementById('results');
 const errorBox = document.getElementById('error-box');
 
 const submitBtn = document.getElementById('submit-btn');
-const resetBtn = document.getElementById('reset-btn');
+const stopBtn = document.getElementById('stop-btn');
 const skipBtn = document.getElementById('skip-btn');
 const submitAnswerBtn = document.getElementById('submit-answer-btn');
 const retryBtn = document.getElementById('retry-btn');
@@ -148,6 +148,7 @@ submitBtn.addEventListener('click', async () => {
     
     submitBtn.disabled = true;
     submitBtn.textContent = 'Starting...';
+    stopBtn.hidden = false;
     
     try {
         const response = await fetch('/api/submit', {
@@ -170,20 +171,27 @@ submitBtn.addEventListener('click', async () => {
         alert(`Error: ${error.message}`);
         submitBtn.disabled = false;
         submitBtn.textContent = 'Generate Resume';
+        stopBtn.hidden = true;
     }
 });
 
-// Reset
-resetBtn.addEventListener('click', async () => {
-    if (!confirm('Are you sure you want to reset? This will clear the current job.')) {
+// Stop job
+stopBtn.addEventListener('click', async () => {
+    if (!confirm('Are you sure you want to stop the current job?')) {
         return;
     }
     
     try {
         await fetch('/api/reset', { method: 'POST' });
-        location.reload();
+        stopStatusPolling();
+        questionModal.hidden = true;
+        progressArea.hidden = true;
+        submissionForm.hidden = false;
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Generate Resume';
+        stopBtn.hidden = true;
     } catch (error) {
-        console.error('Reset failed:', error);
+        console.error('Stop failed:', error);
     }
 });
 
@@ -229,6 +237,7 @@ function showProgress() {
     results.hidden = true;
     errorBox.hidden = true;
     logOutput.innerHTML = '';
+    stopBtn.hidden = false;
 }
 
 // Update progress
@@ -271,40 +280,11 @@ async function showQuestion() {
         answerInput.value = '';
         questionModal.hidden = false;
         
-        // Start timeout countdown
-        if (data.timeout) {
-            const timeoutDate = new Date(data.timeout);
-            startTimeoutCountdown(timeoutDate);
-        }
-        
         answerInput.focus();
         
     } catch (error) {
         console.error('Failed to show question:', error);
     }
-}
-
-// Timeout countdown
-function startTimeoutCountdown(timeoutDate) {
-    if (questionTimeoutInterval) {
-        clearInterval(questionTimeoutInterval);
-    }
-    
-    timeoutWarning.hidden = false;
-    
-    questionTimeoutInterval = setInterval(() => {
-        const remaining = timeoutDate - new Date();
-        
-        if (remaining <= 0) {
-            clearInterval(questionTimeoutInterval);
-            questionTimeoutInterval = null;
-            timeRemaining.textContent = 'Expired';
-        } else {
-            const minutes = Math.floor(remaining / 60000);
-            const seconds = Math.floor((remaining % 60000) / 1000);
-            timeRemaining.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-        }
-    }, 1000);
 }
 
 // Submit answer
@@ -321,6 +301,105 @@ submitAnswerBtn.addEventListener('click', async () => {
                 answer: answer
             })
         });
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        if (data.next_state === 'processing') {
+            // All questions answered
+            questionModal.hidden = true;
+            showProgress();
+            startStatusPolling();
+        } else {
+            // More questions
+            questionModal.hidden = true;
+            startStatusPolling();
+        }
+        
+    } catch (error) {
+        alert(`Error submitting answer: ${error.message}`);
+    }
+});
+
+// Skip question
+skipBtn.addEventListener('click', async () => {
+    answerInput.value = '';
+    submitAnswerBtn.click();
+});
+
+// Show results
+function showResults(resumeUrl, coverLetterUrl) {
+    stopStatusPolling();
+    
+    submissionForm.hidden = true;
+    progressArea.hidden = true;
+    questionModal.hidden = true;
+    errorBox.hidden = true;
+    results.hidden = false;
+    stopBtn.hidden = true;
+    
+    resumeLink.href = resumeUrl;
+    
+    if (coverLetterUrl) {
+        coverLetterLink.href = coverLetterUrl;
+        coverLetterLink.hidden = false;
+    } else {
+        coverLetterLink.hidden = true;
+    }
+}
+
+// Show error
+function showError(message, traceback = null) {
+    stopStatusPolling();
+    
+    submissionForm.hidden = true;
+    progressArea.hidden = true;
+    questionModal.hidden = true;
+    results.hidden = true;
+    errorBox.hidden = false;
+    stopBtn.hidden = true;
+    
+    errorMessage.textContent = message;
+    
+    if (traceback) {
+        errorTrace.textContent = traceback;
+        errorTrace.hidden = false;
+    } else {
+        errorTrace.hidden = true;
+    }
+    
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Generate Resume';
+}
+
+// Retry
+retryBtn.addEventListener('click', () => {
+    errorBox.hidden = true;
+    submissionForm.hidden = false;
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Generate Resume';
+});
+
+// New job
+newJobBtn.addEventListener('click', async () => {
+    try {
+        await fetch('/api/reset', { method: 'POST' });
+        location.reload();
+    } catch (error) {
+        console.error('Failed to reset:', error);
+    }
+});
+
+// Handle Enter key in answer input
+answerInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        submitAnswerBtn.click();
+    }
+});
         
         const data = await response.json();
         
