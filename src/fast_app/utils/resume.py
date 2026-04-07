@@ -67,15 +67,16 @@ def merge_resume_with_base(
                 if "columns" in section_data:
                     result["sections"][section_name]["columns"] = section_data["columns"]
 
-        # Remove company level position and period data
-        # position and period should always only come from the role level
-        for section_name, section_data in result.get("sections", {}).items():
-            if section_name != "experience":
-                continue
-            if not section_data.get("items", []):
-                continue
-            for company in section_data["items"]:
-                company["position"] = ""
+    # Remove company level position and period data
+    # position and period should always only come from the role level
+    for section_name, section_data in result.get("sections", {}).items():
+        if section_name != "experience":
+            continue
+        if not section_data.get("items", []):
+            continue
+        for company in section_data["items"]:
+            company["position"] = ""
+            company["period"] = ""
 
     # Validate the structure matches ResumeData schema
     try:
