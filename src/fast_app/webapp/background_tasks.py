@@ -1,7 +1,6 @@
 """Background task processing for webapp."""
 
 import asyncio
-from datetime import datetime
 from pathlib import Path
 
 from ..config import load_config
@@ -11,17 +10,16 @@ from ..services.job_extractor import JobExtractor
 from ..services.ollama import OllamaService
 from ..services.reactive_resume import ReactiveResumeClient
 from ..utils import (
-    load_profile,
-    load_base_resume,
-    load_base_cover_letter,
-    merge_resume_with_base,
-    merge_cover_letter_with_base,
-    check_existing_resume,
     check_existing_cover_letter,
+    check_existing_resume,
+    load_base_cover_letter,
+    load_base_resume,
+    load_profile,
+    merge_cover_letter_with_base,
+    merge_resume_with_base,
     sanitize_name,
 )
-from .state import JobState, state_manager
-from .log_stream import log_broadcaster
+from .state import JobState
 
 
 async def process_job(url: str, flags: dict[str, bool], state, broadcast_callback) -> None:
@@ -124,11 +122,6 @@ async def process_job(url: str, flags: dict[str, bool], state, broadcast_callbac
                 while state.state == JobState.WAITING_QUESTIONS:
                     await asyncio.sleep(0.5)
 
-                    # Check for timeout
-                    if state.check_timeout():
-                        logger.warning("Question timeout reached, using empty answers")
-                        break
-
                 answers = state.answers
 
                 # Save answers
@@ -215,7 +208,7 @@ async def process_job(url: str, flags: dict[str, bool], state, broadcast_callbac
         )
 
         if existing_resume_id and not flags.get("overwrite_resume", False):
-            raise ValueError(f"Resume already exists. Use --overwrite-resume to replace.")
+            raise ValueError("Resume already exists. Use --overwrite-resume to replace.")
 
         # Add notes with URL and description
         resume_data["metadata"]["notes"] = f"{url}\n\n{job_description}"
@@ -241,7 +234,7 @@ async def process_job(url: str, flags: dict[str, bool], state, broadcast_callbac
             )
 
             if existing_cl_id and not flags.get("overwrite_resume", False):
-                raise ValueError(f"Cover letter already exists. Use --overwrite-resume to replace.")
+                raise ValueError("Cover letter already exists. Use --overwrite-resume to replace.")
 
             # Add notes
             cover_letter_data["metadata"]["notes"] = f"{url}\n\n{job_description}"

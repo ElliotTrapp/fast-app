@@ -2,9 +2,7 @@
 
 import asyncio
 import logging
-from typing import Callable
-
-import click
+from collections.abc import Callable
 
 
 class WebSocketLogHandler(logging.Handler):

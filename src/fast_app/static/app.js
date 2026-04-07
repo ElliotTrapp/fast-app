@@ -4,7 +4,6 @@
 let ws = null;
 let statusCheckInterval = null;
 let currentJobId = null;
-let questionTimeoutInterval = null;
 
 // DOM Elements
 const submissionForm = document.getElementById('submission-form');
@@ -14,7 +13,6 @@ const results = document.getElementById('results');
 const errorBox = document.getElementById('error-box');
 
 const submitBtn = document.getElementById('submit-btn');
-const resetBtn = document.getElementById('reset-btn');
 const skipBtn = document.getElementById('skip-btn');
 const submitAnswerBtn = document.getElementById('submit-answer-btn');
 const retryBtn = document.getElementById('retry-btn');
@@ -36,8 +34,6 @@ const questionText = document.getElementById('question-text');
 const qNum = document.getElementById('q-num');
 const qTotal = document.getElementById('q-total');
 const answerInput = document.getElementById('answer-input');
-const timeoutWarning = document.getElementById('timeout-warning');
-const timeRemaining = document.getElementById('time-remaining');
 
 const resumeLink = document.getElementById('resume-link');
 const coverLetterLink = document.getElementById('cover-letter-link');
@@ -174,20 +170,6 @@ submitBtn.addEventListener('click', async () => {
     }
 });
 
-// Reset
-resetBtn.addEventListener('click', async () => {
-    if (!confirm('Are you sure you want to reset? This will clear the current job.')) {
-        return;
-    }
-    
-    try {
-        await fetch('/api/reset', { method: 'POST' });
-        location.reload();
-    } catch (error) {
-        console.error('Reset failed:', error);
-    }
-});
-
 // Status polling
 function startStatusPolling() {
     if (statusCheckInterval) {
@@ -272,40 +254,11 @@ async function showQuestion() {
         answerInput.value = '';
         questionModal.hidden = false;
         
-        // Start timeout countdown
-        if (data.timeout) {
-            const timeoutDate = new Date(data.timeout);
-            startTimeoutCountdown(timeoutDate);
-        }
-        
         answerInput.focus();
         
     } catch (error) {
         console.error('Failed to show question:', error);
     }
-}
-
-// Timeout countdown
-function startTimeoutCountdown(timeoutDate) {
-    if (questionTimeoutInterval) {
-        clearInterval(questionTimeoutInterval);
-    }
-    
-    timeoutWarning.hidden = false;
-    
-    questionTimeoutInterval = setInterval(() => {
-        const remaining = timeoutDate - new Date();
-        
-        if (remaining <= 0) {
-            clearInterval(questionTimeoutInterval);
-            questionTimeoutInterval = null;
-            timeRemaining.textContent = 'Expired';
-        } else {
-            const minutes = Math.floor(remaining / 60000);
-            const seconds = Math.floor((remaining % 60000) / 1000);
-            timeRemaining.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-        }
-    }, 1000);
 }
 
 // Submit answer
@@ -329,23 +282,14 @@ submitAnswerBtn.addEventListener('click', async () => {
             throw new Error(data.error);
         }
         
-        // Clear timeout
-        if (questionTimeoutInterval) {
-            clearInterval(questionTimeoutInterval);
-            questionTimeoutInterval = null;
-        }
-        
         if (data.next_state === 'processing') {
             // All questions answered
             questionModal.hidden = true;
-            timeoutWarning.hidden = true;
             showProgress();
             startStatusPolling();
         } else {
             // More questions
-            // showQuestion() will be called by status poll
             questionModal.hidden = true;
-            timeoutWarning.hidden = true;
             startStatusPolling();
         }
         
@@ -411,6 +355,16 @@ retryBtn.addEventListener('click', () => {
     submitBtn.textContent = 'Generate Resume';
 });
 
+// New job
+newJobBtn.addEventListener('click', async () => {
+    try {
+        await fetch('/api/reset', { method: 'POST' });
+        location.reload();
+    } catch (error) {
+        console.error('Failed to reset:', error);
+    }
+});
+
 // Cancel - return to main menu with confirmation
 cancelBtns.forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -421,12 +375,6 @@ cancelBtns.forEach(btn => {
         try {
             // Stop polling
             stopStatusPolling();
-            
-            // Clear timeout if active
-            if (questionTimeoutInterval) {
-                clearInterval(questionTimeoutInterval);
-                questionTimeoutInterval = null;
-            }
             
             // Reset server state
             await fetch('/api/reset', { method: 'POST' });
@@ -443,23 +391,12 @@ cancelBtns.forEach(btn => {
             submitBtn.textContent = 'Generate Resume';
             logOutput.innerHTML = '';
             answerInput.value = '';
-            timeoutWarning.hidden = true;
             
         } catch (error) {
             console.error('Failed to cancel:', error);
             alert('Failed to cancel. Please try refreshing the page.');
         }
     });
-});
-
-// New job
-newJobBtn.addEventListener('click', async () => {
-    try {
-        await fetch('/api/reset', { method: 'POST' });
-        location.reload();
-    } catch (error) {
-        console.error('Failed to reset:', error);
-    }
 });
 
 // Handle Enter key in answer input

@@ -1,7 +1,6 @@
 """FastAPI web application for Fast-App."""
 
 import asyncio
-import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -10,11 +9,9 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
-from ..config import load_config
-from .state import state_manager, JobState
-from .log_stream import log_broadcaster
 from .background_tasks import process_job
-
+from .log_stream import log_broadcaster
+from .state import state_manager
 
 # Background task tracking
 current_task: asyncio.Task | None = None
@@ -28,11 +25,8 @@ async def lifespan(app: FastAPI):
 
     # Resume any active job
     if state_manager.is_active():
-        # Job was interrupted, reset to error
-        if state_manager.state == JobState.WAITING_QUESTIONS:
-            state_manager.set_error("Job interrupted - please retry")
-        else:
-            state_manager.reset()
+        # Job was interrupted, reset to idle
+        state_manager.reset()
 
     yield
 
@@ -94,7 +88,10 @@ async def root():
         return HTMLResponse(content=index_path.read_text(), status_code=200)
     else:
         return HTMLResponse(
-            content="<html><body><h1>Fast-App</h1><p>Static files not found. Run from project root.</p></body></html>",
+            content=(
+                "<html><body><h1>Fast-App</h1>"
+                "<p>Static files not found. Run from project root.</p></body></html>"
+            ),
             status_code=200,
         )
 
@@ -108,9 +105,6 @@ async def health():
 @app.get("/api/status")
 async def get_status():
     """Get current job status."""
-    # Check for timeout
-    state_manager.check_timeout()
-
     return state_manager.to_dict()
 
 
@@ -151,27 +145,20 @@ async def submit_job(request: dict[str, Any]):
 @app.get("/api/question")
 async def get_question():
     """Get the current question."""
-    if state_manager.state != JobState.WAITING_QUESTIONS:
+    if state_manager.state.value != "waiting_questions":
         return {"error": "No question available", "state": state_manager.state.value}, 400
-
-    # Check timeout
-    if state_manager.check_timeout():
-        return {"error": "Question timeout", "state": state_manager.state.value}, 408
 
     return {
         "index": state_manager.current_question_index,
         "total": len(state_manager.questions),
         "question": state_manager.questions[state_manager.current_question_index],
-        "timeout": state_manager.question_timeout_at.isoformat()
-        if state_manager.question_timeout_at
-        else None,
     }
 
 
 @app.post("/api/answer")
 async def submit_answer(request: dict[str, Any]):
     """Submit an answer to the current question."""
-    if state_manager.state != JobState.WAITING_QUESTIONS:
+    if state_manager.state.value != "waiting_questions":
         return {"error": "Not waiting for answers", "state": state_manager.state.value}, 400
 
     answer = request.get("answer", "")
@@ -225,5 +212,5 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.send_json({"type": "pong"})
     except WebSocketDisconnect:
         manager.disconnect(websocket)
-    except Exception as e:
+    except Exception:
         manager.disconnect(websocket)
