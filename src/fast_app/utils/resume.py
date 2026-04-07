@@ -50,9 +50,16 @@ def merge_resume_with_base(
         if "summary" in generated:
             result["summary"] = generated["summary"]
 
-        # Override sections with generated content
+        # Override sections with generated content, but preserve profiles from base
         if "sections" in generated:
+            # Preserve profiles section from base template
+            base_profiles = base.get("sections", {}).get("profiles")
+
             result["sections"] = generated["sections"]
+
+            # Restore profiles from base if it existed
+            if base_profiles:
+                result["sections"]["profiles"] = base_profiles
 
         # Preserve columns from base template
         for section_name, section_data in base.get("sections", {}).items():

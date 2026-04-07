@@ -83,6 +83,9 @@ def merge_cover_letter_with_base(
         # Populate basics from profile
         result["basics"] = profile.get("basics", {})
 
+        # Preserve all sections from base (they're styling/layout for cover letters)
+        # No need to override with generated content
+
         # Find and update the Cover Letter custom section
         custom_sections = result.get("customSections", [])
         cover_letter_section_idx = None
