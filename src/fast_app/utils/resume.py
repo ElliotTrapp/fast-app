@@ -1,7 +1,6 @@
 """Resume utility functions."""
 
 import copy
-import json
 from typing import Any
 
 import click
@@ -50,22 +49,33 @@ def merge_resume_with_base(
         if "summary" in generated:
             result["summary"] = generated["summary"]
 
-        # Override sections with generated content, but preserve profiles from base
+        # Override sections with generated content, but preserve profiles and languages from base
         if "sections" in generated:
-            # Preserve profiles section from base template
-            base_profiles = base.get("sections", {}).get("profiles")
-
             result["sections"] = generated["sections"]
 
-            # Restore profiles from base if it existed
-            if base_profiles:
-                result["sections"]["profiles"] = base_profiles
+            # Preserve profiles section from base template
+            if base.get("sections", {}).get("profiles"):
+                result["sections"]["profiles"] = base["sections"]["profiles"]
+
+            # Preserve languages section from base template
+            if base.get("sections", {}).get("languages"):
+                result["sections"]["languages"] = base["sections"]["languages"]
 
         # Preserve columns from base template
         for section_name, section_data in base.get("sections", {}).items():
             if section_name in result.get("sections", {}):
                 if "columns" in section_data:
                     result["sections"][section_name]["columns"] = section_data["columns"]
+
+        # Remove company level position and period data
+        # position and period should always only come from the role level
+        for section_name, section_data in result.get("sections", {}).items():
+            if section_name != "experience":
+                continue
+            if not section_data.get("items", []):
+                continue
+            for company in section_data["items"]:
+                company["position"] = ""
 
     # Validate the structure matches ResumeData schema
     try:
@@ -88,9 +98,9 @@ def merge_resume_with_base(
 
         if base:
             click.echo(click.style("\n📊 Base template structure:", fg="cyan"))
-            click.echo(f"   Keys: {list(base.keys())}")
+            click.echo("   Keys: {list(base.keys())}")
             if "sections" in base:
-                click.echo(f"   Section columns:")
+                click.echo("   Section columns:")
                 for section_name, section_data in base.get("sections", {}).items():
                     cols = section_data.get("columns", "not set")
                     click.echo(f"     - {section_name}: {cols}")

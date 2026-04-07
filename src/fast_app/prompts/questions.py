@@ -16,7 +16,7 @@ def get_questions_prompt(job_data: dict[str, Any], profile_data: dict[str, Any])
     Returns:
         Prompt string for LLM
     """
-    return f"""You are an expert resume writer preparing to tailor a resume for a job application.
+    return f"""You are an expert career consultant preparing to write a compelling cover letter.
 
 ## Job Details
 - Title: {job_data.get("title", "Unknown")}
@@ -32,18 +32,24 @@ def get_questions_prompt(job_data: dict[str, Any], profile_data: dict[str, Any])
 {json.dumps(profile_data, indent=2)}
 
 ## Instructions
-Based on the job requirements and candidate profile, generate up to 8 questions that would help create the strongest possible tailored resume and cover letter. 
+Based on the job requirements and candidate profile, generate up to 8 questions
+to create the most compelling cover letter and tailored resume.
 
-Focus on:
-1. Specific experiences related to key job requirements
-2. Quantifiable achievements that could be highlighted
-3. Relevant projects or work not in the profile
-4. Technologies or skills mentioned in the job description
-5. Company-specific knowledge or why they're interested in this role
-6. Leadership, mentorship, or collaboration experiences
-7. Unique value propositions or differentiators
+Focus PRIMARILY on cover letter creation. The questions should help gather
+information to write a cover letter that:
+1. Explains the VALUE the candidate can bring to this organization
+2. Explains WHY the candidate wants to work for THIS company
+3. Explains WHY the candidate wants THIS specific role
+4. Highlights SPECIFIC achievements and impacts relevant to this role
+5. Demonstrates knowledge of and enthusiasm for the company
 
-Only ask questions that would meaningfully improve the resume quality. Skip questions where the answer would be obvious from the profile or job description.
+Also ask about:
+6. Relevant experiences for the resume (to select most impactful ones)
+7. Quantifiable achievements and metrics that could be highlighted
+8. Unique value propositions or differentiators for this role
+
+Only ask questions where the answer would improve the cover letter quality.
+Skip questions where the answer would be obvious from the profile or job.
 
 ## Critical Constraint
 Return ONLY valid JSON matching this schema. No additional text outside the JSON.

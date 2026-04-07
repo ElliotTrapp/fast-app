@@ -32,7 +32,8 @@ def get_resume_prompt(
 {qanda}
 """
 
-    return f"""You are an expert resume writer. Generate a tailored resume for this job using the candidate's profile.
+    return f"""You are an expert resume writer. Generate a FITTED one-page A4 resume
+using the candidate's profile.
 
 ## Job Details
 - Title: {job_data.get("title", "Unknown")}
@@ -47,18 +48,27 @@ def get_resume_prompt(
 ## Candidate Profile
 {json.dumps(profile_data, indent=2)}
 {questionnaire_section}
+## PAGE LENGTH CONSTRAINT - CRITICAL
+The resume MUST fit on a SINGLE A4 page when formatted. This means:
+- KEEP summaries CONCISE (2-3 sentences maximum)
+- INCLUDE ONLY the most RELEVANT experiences for this job (typically 3-4 max)
+- EXCLUDE less relevant or older experiences
+- Keep bullet points BRIEF and impactful (aim for 3-5 bullets per role)
+- PRIORITIZE content by relevance to THIS specific job
+
 ## Instructions
-1. SELECT the most relevant work experiences from the profile that match this job
+1. SELECT ONLY the most RELEVANT experiences that match THIS job's requirements
 2. ORDER skills by relevance to the job requirements
-3. TAILOR the summary to highlight fit for this specific role (3-4 sentences)
+3. Write a TIGHT, FOCUSED summary (2-3 sentences max) highlighting fit for this role
 4. FORMAT descriptions as HTML bullet lists: <ul><li>...</li></ul>
 5. For each skill group, include the name and keywords list
 6. Generate UUIDs for all 'id' fields (use format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
 7. Set all 'hidden' fields to false
-8. DO NOT include any picture or photo references
 
-## Critical Constraint
-Return ONLY valid JSON matching this schema. No additional text outside the JSON.
+## Critical Constraints
+- Return ONLY valid JSON matching this schema
+- The resume MUST be concise enough to fit ONE A4 page
+- No additional text outside the JSON
 
 ## Schema Overview
 {ResumeContent.model_json_schema()}

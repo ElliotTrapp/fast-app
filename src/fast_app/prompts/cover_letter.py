@@ -33,7 +33,7 @@ def get_cover_letter_prompt(
 
     candidate_name = profile_data.get("basics", {}).get("name", "the candidate")
 
-    return f"""You are an expert cover letter writer. Write a compelling, professional, and personal cover letter for this job.
+    return f"""You are an expert cover letter writer. Write a compelling, professional cover letter.
 
 ## Job Details
 - Title: {job_data.get("title", "Unknown")}
@@ -48,20 +48,37 @@ def get_cover_letter_prompt(
 ## Candidate Profile
 {profile_data}
 {questionnaire_section}
+## WORD COUNT REQUIREMENT - CRITICAL
+The cover letter MUST be 400-500 words in length. This is a hard requirement.
+
+## CONTENT REQUIREMENTS - CRITICAL
+The cover letter MUST address these THREE elements:
+1. VALUE: Explain the value and impact you can bring to the organization
+2. ORGANIZATION: Why you want to work for THIS specific organization
+3. ROLE: Why you want THIS specific role and how it fits your career
+
+Structure your cover letter with CLEAR BOLD section headers using <strong> tags.
+
+## CRITICAL: EM DASHES ARE FORBIDDEN
+You MUST NOT use em dashes (— or –) anywhere in the cover letter.
+Use commas, semicolons, or periods instead.
+
 ## Instructions
-1. Write a professional, confident, and personal cover letter (under 350 words)
-2. Make the candidate stand out as an outstanding candidate
-3. DO NOT simply repeat skills already listed in the resume
-4. Focus on unique value, achievements, and fit for this specific role
-5. Be specific about why this company and role appeal to the candidate
-6. Show genuine enthusiasm and knowledge about the company
-7. Structure: Opening hook, 2-3 body paragraphs with section headers, brief closing, signature
+1. Write a compelling professional cover letter (400-500 words)
+2. Use BOLD section headers formatted as <strong>Header Name</strong>
+3. Focus PRIMARILY on the VALUE you bring to the organization
+4. Explain WHY you want to work for THIS organization specifically
+5. Explain WHY you want THIS specific role
+6. DO NOT simply repeat skills from the resume
+7. Make the candidate stand out with SPECIFIC achievements and impacts
+8. Use ACTIVE voice and STRONG verbs
 
 ## Formatting Requirements
 - Use HTML formatting with <p> tags for each paragraph
-- Use <strong>Section Headers</strong> for section headers (e.g., <strong>Why This Role Appeals to Me</strong>)
+- Use <strong>Section Headers</strong> for clear sections (e.g., Why I Want to Join)
 - Each paragraph should be wrapped in <p>...</p> tags
 - End with "Sincerely,</p><p>{candidate_name}</p>"
+- NO EM DASHES anywhere in the text
 
 ## Critical Constraint
 Return ONLY valid JSON matching this schema. No additional text outside the JSON.

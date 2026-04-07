@@ -115,16 +115,12 @@
             "profiles",
             "summary",
             "experience",
-            "references",
-            "languages",
-            "interests",
-            "volunteer",
-            "projects",
             "skills",
             "education",
             "awards",
             "publications",
-            "certifications"
+            "certifications",
+            "projects"
           ],
           "sidebar": []
         }
