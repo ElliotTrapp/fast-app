@@ -14,13 +14,16 @@ This file contains instructions for AI agents working on this codebase.
 
 ### Main Components
 
-- `cli.py` - Click CLI with `generate` and `test-connection` commands
+- `cli.py` - Click CLI with commands: `generate`, `test-connection`, `list`, `status`, `serve`, `profile`
 - `services/job_extractor.py` - Extract job data from URLs using Ollama web_fetch
 - `services/ollama.py` - LLM service for question generation and resume generation
 - `services/reactive_resume.py` - API client for Reactive Resume
 - `services/cache.py` - Cache manager for job data, Q&A, resume data
 - `log.py` - Centralized logger with semantic methods
 - `models.py` - Pydantic models for config and data structures
+- `knowledge/` - Knowledge base module for learning from Q&A sessions
+  - `kb.py` - SQLite-based knowledge base with confidence decay
+  - `models.py` - Fact, Generation, Pattern models
 
 ### Data Flow
 
@@ -160,10 +163,18 @@ Run tests with:
 pytest -v
 ```
 
-No tests currently defined. When adding tests:
+Tests cover:
+- Knowledge base operations (fact storage, confidence decay, import/export)
+- CLI commands (generate, profile show/dump/load)
+- TUI screens (initialization, statistics display)
+- Job extraction and resume generation
+- Reactive Resume API integration
+
+When adding tests:
 1. Test behavior, not implementation
 2. Use pytest fixtures for setup
 3. Mock external APIs (Ollama, Reactive Resume)
+4. Use `tempfile` for knowledge base tests to avoid file conflicts
 
 ## Development
 
@@ -181,6 +192,47 @@ Use `--debug` flag to see:
 - LLM prompts and responses
 - API requests/responses
 - Cache operations
+
+### Knowledge Base
+
+The knowledge base (`knowledge/`) learns from Q&A sessions and tracks confidence:
+
+**Storage** (SQLite):
+- `output/knowledge.db` - SQLite database with tables: facts, generations, patterns, metadata
+
+**Confidence Decay** (type-specific):
+- Skills: 0.998 decay rate (~180 day half-life)
+- Experience: 0.996 (~120 day half-life)
+- Achievements: 0.997 (~150 day half-life)
+- Preferences: 0.990 (~70 day half-life)
+- General: 0.995 (~140 day half-life)
+
+**CLI Commands**:
+```bash
+harlequin output/knowledge.db  # Interactive database explorer (recommended)
+fast-app profile show           # Show statistics
+fast-app profile dump           # Export to JSON
+fast-app profile load FILE      # Import from JSON
+```
+
+**Harlequin**:
+Harlequin is an interactive SQL IDE for the terminal. Install it with:
+```bash
+pip install harlequin
+```
+
+Then explore the knowledge base:
+```bash
+harlequin output/knowledge.db
+```
+
+This gives you full SQL access to query facts, generations, and patterns.
+
+**Fact Sources** (valid values):
+- `qa` - From Q&A sessions
+- `profile` - From profile file
+- `imported` - Imported from external source
+- `inferred` - Inferred from other facts
 
 ### Code Style
 
