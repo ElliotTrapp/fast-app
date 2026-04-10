@@ -1,21 +1,18 @@
 services:
   fast-app:
-    build: .
+    image: trapper137/fast-app:latest
     ports:
-      - "${PORT:-8000}:8000"
+      - "${WEBUI_PORT_FAST_APP}:8000"
     environment:
-      - OLLAMA_ENDPOINT=${OLLAMA_ENDPOINT:-http://192.168.1.2:11434}
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-glm-5:cloud}
+      - OLLAMA_ENDPOINT=${OLLAMA_LLM_API_BASE}
+      - OLLAMA_MODEL=${OLLAMA_LLM_MODEL}
       - RESUME_API_KEY=${RESUME_API_KEY}
-      - RESUME_ENDPOINT=${RESUME_ENDPOINT:-http://reactive-resume:3000}
+      - RESUME_ENDPOINT=${REACTIVE_RESUME_FRONTEND_BASE_URL}
     volumes:
-      - ./config.json:/app/config.json:ro
-      - ./profile.json:/app/profile.json:ro
-      - ./base-resume.json:/app/base-resume.json:ro
-      - ./base-cover-letter.json:/app/base-cover-letter.json:ro
-      - ./output:/app/output
-      - fast-app-state:/root/.fast-app
+      - ${FOLDER_FOR_CONFIGS}/fast-app/config.json:/app/config.json:ro
+      - ${FOLDER_FOR_CONFIGS}/fast-app/profile.json:/app/profile.json:ro
+      - ${FOLDER_FOR_CONFIGS}/fast-app/base-resume.json:/app/base-resume.json:ro
+      - ${FOLDER_FOR_CONFIGS}/fast-app/base-cover-letter.json:/app/base-cover-letter.json:ro
+      - ${FOLDER_FOR_CONFIGS}/fast-app/output:/app/output
+      - ${FOLDER_FOR_CONFIGS}/fast-app/.fast-app:/root/.fast-app
     restart: unless-stopped
-
-volumes:
-  fast-app-state:
