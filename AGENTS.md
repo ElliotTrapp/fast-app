@@ -40,17 +40,24 @@ This file contains instructions for AI agents working on this codebase.
    - Prompts user via Click
    - Saved to `answers.json`
 
-4. **Resume Generation** (`OllamaService.generate_resume()`)
-   - Uses job + profile + Q&A to generate tailored resume
+4. **Knowledge Base Integration** (`knowledge/integration.py`)
+   - Extracts facts from Q&A answers
+   - Stores facts with confidence scores
+   - Tracks fact types (skill/experience/achievement/preference/general)
+   - Maintains knowledge base at `output/knowledge.db`
+   - Records generation events with linked facts
+
+5. **Resume Generation** (`OllamaService.generate_resume()`)
+   - Uses job + profile + Q&A + knowledge base context to generate tailored resume
    - Enforces Reactive Resume JSON schema
    - Saved to `resume.json`
 
-5. **Cover Letter Generation** (`OllamaService.generate_cover_letter()`)
-   - Uses job + profile + Q&A to generate tailored cover letter
+6. **Cover Letter Generation** (`OllamaService.generate_cover_letter()`)
+   - Uses job + profile + Q&A + knowledge base context to generate tailored cover letter
    - Returns recipient and content
    - Saved to `cover_letter.json`
 
-6. **Import to Reactive Resume**
+7. **Import to Reactive Resume**
    - `create_resume()` - POST to create resume/cover letter with title + company tag
    - `update_resume()` - PUT to add resume/cover letter data
    - Cache reactive_resume ID and reactive_cover_letter ID for deduplication
@@ -207,12 +214,19 @@ The knowledge base (`knowledge/`) learns from Q&A sessions and tracks confidence
 - Preferences: 0.990 (~70 day half-life)
 - General: 0.995 (~140 day half-life)
 
+**Integration Flow**:
+1. After Q&A, facts are extracted and stored (`extract_facts_from_qa()`)
+2. Before generation, relevant context is retrieved (`get_relevant_context()`)
+3. After generation, event is recorded (`record_generation()`)
+4. Facts can be confirmed/refreshed to boost confidence
+5. Use `fast-app profile show` to view statistics
+
 **CLI Commands**:
 ```bash
-harlequin output/knowledge.db  # Interactive database explorer (recommended)
-fast-app profile show           # Show statistics
-fast-app profile dump           # Export to JSON
-fast-app profile load FILE      # Import from JSON
+harlequin ~/.fast-app/knowledge.db  # Interactive database explorer (recommended)
+fast-app profile show                # Show statistics
+fast-app profile dump                # Export to JSON
+fast-app profile load FILE           # Import from JSON
 ```
 
 **Harlequin**:
@@ -223,7 +237,7 @@ pip install harlequin
 
 Then explore the knowledge base:
 ```bash
-harlequin output/knowledge.db
+harlequin ~/.fast-app/knowledge.db
 ```
 
 This gives you full SQL access to query facts, generations, and patterns.

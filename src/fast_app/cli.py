@@ -156,6 +156,67 @@ def generate(
         # Initialize cache
         output_dir = Path.cwd() / config.output.directory
 
+        # Initialize knowledge base (global location)
+        from pathlib import Path as PathlibPath
+        from .knowledge import KnowledgeBase
+
+        kb_dir = PathlibPath.home() / ".fast-app"
+        kb_dir.mkdir(exist_ok=True)
+        kb_path = kb_dir / "knowledge.db"
+
+        kb = KnowledgeBase(str(kb_path))
+
+        if debug:
+            click.echo(f"\n📚 Knowledge base: {kb_path}")
+
+        if verbose:
+            stats = kb.get_stats()
+            if stats["total_facts"] > 0:
+                click.echo(f"   ✓ Knowledge base: {stats['total_facts']} facts")
+                if debug:
+                    click.echo(f"      By type: {stats['facts_by_type']}")
+                    click.echo(f"      By source: {stats['facts_by_source']}")
+                    if stats["facts_needing_refresh"] > 0:
+                        click.echo(f"      ⚠️  {stats['facts_needing_refresh']} facts need refresh")
+            else:
+                click.echo(f"   ✓ Knowledge base: empty (will learn from Q&A)")
+
+        # ============================================
+        # JOB EXTRACTION
+        # ============================================
+        # KNOWLEDGE BASE INITIALIZATION
+        # ============================================
+
+        kb_path = output_dir / "knowledge.db"
+        # kb_path = Path(Path(__file__).parent.parent.parent, "knowledge.db")
+        kb = None
+
+        if kb_path.exists():
+            from .knowledge import KnowledgeBase
+
+            if debug:
+                click.echo("\n📚 Loading knowledge base...")
+
+            kb = KnowledgeBase(str(kb_path))
+            stats = kb.get_stats()
+
+            if verbose:
+                click.echo(f"   ✓ Knowledge base loaded: {stats['total_facts']} facts")
+                click.echo(f"   ✓ Facts by type: {stats['facts_by_type']}")
+                click.echo(f"   ✓ Facts by source: {stats['facts_by_source']}")
+
+                if stats["total_facts"] > 0:
+                    if stats["facts_needing_refresh"] > 0:
+                        click.echo(f"   ⚠️  {stats['facts_needing_refresh']} facts need refresh")
+                    click.echo(f"   ✓ Average confidence: {stats.get('average_confidence', 0):.0%}")
+        else:
+            if debug:
+                click.echo("\n📚 No knowledge base found, will create after Q&A")
+
+        # ============================================
+        # JOB EXTRACTION
+        # ============================================
+
         # Extract job ID from URL hash
         job_id = generate_job_id(url)
 
@@ -241,6 +302,59 @@ def generate(
                             click.echo("   💾 Saved: answers.json")
                     else:
                         logger.warning("No questions generated, proceeding with resume creation.")
+
+        # ============================================
+        # KNOWLEDGE BASE: Extract facts from Q&A
+        # ============================================
+
+        if answers and not skip_questions:
+            from .knowledge.integration import extract_facts_from_qa
+
+            fact_ids = extract_facts_from_qa(questions, answers, kb, debug=debug)
+
+            if verbose and fact_ids:
+                click.echo(f"   ✓ Extracted {len(fact_ids)} facts from Q&A")
+
+        # ============================================
+        # KNOWLEDGE BASE: Get relevant context
+        # ============================================
+
+        kb_context = None
+        from .knowledge.integration import get_relevant_context
+
+        kb_context = get_relevant_context(kb, job_data, debug=debug)
+
+        if verbose and kb_context:
+            click.echo(f"   ✓ Found {len(kb_context)} relevant facts in KB")
+
+            if debug:
+                # Show facts by type
+                by_type = {}
+                for item in kb_context:
+                    fact_type = item["fact"]["type"]
+                    by_type[fact_type] = by_type.get(fact_type, 0) + 1
+                click.echo(f"      By type: {by_type}")
+
+        # ============================================
+        # PHASE 1: Generate all local data first
+        # ============================================
+
+        kb_context = None
+        if kb:
+            from .knowledge.integration import get_relevant_context, format_context_for_prompt
+
+            kb_context = get_relevant_context(kb, job_data, debug=debug)
+
+            if verbose and kb_context:
+                click.echo(f"   ✓ Found {len(kb_context)} relevant facts in KB")
+
+                if debug:
+                    # Show facts by type
+                    by_type = {}
+                    for item in kb_context:
+                        fact_type = item["fact"]["type"]
+                        by_type[fact_type] = by_type.get(fact_type, 0) + 1
+                    click.echo(f"      By type: {by_type}")
 
         # ============================================
         # PHASE 1: Generate all local data first
@@ -380,6 +494,24 @@ def generate(
         resume_url = rr_client.get_resume_url(resume_id)
         logger.success(f"Resume created: {resume_url}")
 
+        # ============================================
+        # KNOWLEDGE BASE: Record generation
+        # ============================================
+
+        from .knowledge.integration import record_generation
+
+        generation_id = record_generation(
+            kb=kb,
+            job_url=url,
+            job_title=job_title,
+            company=company,
+            related_facts=[item["fact"]["id"] for item in kb_context] if kb_context else None,
+            debug=debug,
+        )
+
+        if verbose:
+            click.echo(f"   ✓ Recorded generation in KB: {generation_id[:8]}")
+
         # Create cover letter if requested
         if not skip_cover_letter and final_cover_letter:
             cover_letter_title = f"{job_title} at {company} Cover Letter"
@@ -422,6 +554,26 @@ def generate(
 
             cover_letter_url = rr_client.get_resume_url(cover_letter_id)
             logger.success(f"Cover letter created: {cover_letter_url}")
+
+        # ============================================
+        # KNOWLEDGE BASE: Summary
+        # ============================================
+
+        if verbose:
+            click.echo("\n📚 Knowledge Base Summary:")
+            from .knowledge.integration import summarize_knowledge_base
+
+            summary = summarize_knowledge_base(kb)
+            click.echo(f"   Total facts: {summary['total_facts']}")
+            click.echo(f"   Health score: {summary['health_score']:.0%}")
+            click.echo(
+                f"   Generations: {summary['total_generations']} ({summary['successful_generations']} successful)"
+            )
+            click.echo(f"   Location: {kb_path}")
+
+            if summary["needing_refresh"] > 0:
+                click.echo(f"   ⚠️  {summary['needing_refresh']} facts need refresh")
+                click.echo("      Run 'harlequin ~/.fast-app/knowledge.db' to explore and update")
 
     except FileNotFoundError as e:
         logger.error(str(e))
@@ -810,6 +962,132 @@ def serve(host: str, port: int, config: str | None) -> None:
     except Exception as e:
         logger.error(f"Server error: {e}")
         raise click.ClickException(f"Server error: {e}")
+
+
+@main.group()
+def profile() -> None:
+    """Manage knowledge base profile (facts about user).
+
+    Use 'harlequin ~/.fast-app/knowledge.db' to explore the database interactively.
+    """
+    click.echo("Use 'harlequin ~/.fast-app/knowledge.db' to explore the knowledge base.")
+    click.echo("\nSubcommands:")
+    click.echo("  show  - Show statistics")
+    click.echo("  dump  - Export to JSON")
+    click.echo("  load  - Import from JSON")
+
+
+@profile.command()
+def show() -> None:
+    """Show knowledge base statistics."""
+    from pathlib import Path as PathlibPath
+    from .knowledge import KnowledgeBase
+
+    try:
+        kb_dir = PathlibPath.home() / ".fast-app"
+        kb_path = kb_dir / "knowledge.db"
+
+        if not kb_path.exists():
+            click.echo("\n⚠️  Knowledge base not found.")
+            click.echo(f"   Expected at: {kb_path}")
+            click.echo(
+                "   Run 'fast-app generate <url>' to create and populate the knowledge base."
+            )
+            return
+
+        kb = KnowledgeBase(str(kb_path))
+        stats = kb.get_stats()
+
+        click.echo("\n📊 Knowledge Base Statistics\n")
+        click.echo(f"Location: {kb_path}")
+        click.echo(f"Total facts: {stats['total_facts']}")
+        click.echo(f"Facts needing refresh: {stats['facts_needing_refresh']}")
+        click.echo()
+        click.echo("Facts by type:")
+        for fact_type, count in stats["facts_by_type"].items():
+            click.echo(f"  {fact_type}: {count}")
+        click.echo()
+        click.echo("Facts by source:")
+        for source, count in stats["facts_by_source"].items():
+            click.echo(f"  {source}: {count}")
+        click.echo()
+        click.echo("Generations:")
+        click.echo(f"  Total: {stats['total_generations']}")
+        click.echo(f"  Successful: {stats.get('successful_generations', 0)}")
+        click.echo(f"  Failed: {stats.get('failed_generations', 0)}")
+
+    except FileNotFoundError as e:
+        logger.error(str(e))
+        raise click.ClickException(str(e))
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        raise click.ClickException(f"Error: {e}")
+
+
+@profile.command()
+@click.option("--output", "-o", default=None, help="Path to output JSON file")
+def dump(output: str | None) -> None:
+    """Export knowledge base to JSON."""
+    import json
+    from pathlib import Path as PathlibPath
+    from .knowledge import KnowledgeBase
+
+    try:
+        kb_dir = PathlibPath.home() / ".fast-app"
+        kb_path = kb_dir / "knowledge.db"
+
+        if not kb_path.exists():
+            click.echo("\n⚠️  Knowledge base not found.")
+            click.echo(f"   Expected at: {kb_path}")
+            return
+
+        kb = KnowledgeBase(str(kb_path))
+        data = kb.export_to_json()
+
+        if output:
+            output_path = PathlibPath(output)
+        else:
+            output_path = kb_dir / "knowledge_export.json"
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(json.dumps(data, indent=2))
+        click.echo(f"Exported {len(data['facts'])} facts to {output_path}")
+
+    except FileNotFoundError as e:
+        logger.error(str(e))
+        raise click.ClickException(str(e))
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        raise click.ClickException(f"Error: {e}")
+
+
+@profile.command()
+@click.argument("json_file", type=click.Path(exists=True))
+def load(json_file: str) -> None:
+    """Import knowledge base from JSON file."""
+    import json
+    from pathlib import Path as PathlibPath
+    from .knowledge import KnowledgeBase
+
+    try:
+        kb_dir = PathlibPath.home() / ".fast-app"
+        kb_path = kb_dir / "knowledge.db"
+
+        kb_dir.mkdir(parents=True, exist_ok=True)
+
+        kb = KnowledgeBase(str(kb_path))
+        json_path = PathlibPath(json_file)
+        data = json.loads(json_path.read_text())
+
+        kb.import_from_json(data)
+        click.echo(f"Imported {len(data['facts'])} facts")
+
+    except FileNotFoundError as e:
+        logger.error(str(e))
+        raise click.ClickException(str(e))
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        raise click.ClickException(f"Error: {e}")
 
 
 if __name__ == "__main__":
