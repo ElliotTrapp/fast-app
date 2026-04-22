@@ -316,21 +316,15 @@ def generate(
 
                 # Debug: Log the cover letter content
                 if debug:
-                    content_len = len(
-                        cover_letter_content.get("content", "")
-                    )
+                    content_len = len(cover_letter_content.get("content", ""))
                     click.echo(f"\n📝 Generated cover letter content length: {content_len}")
-                    click.echo(
-                        f"📝 Cover letter content keys: {list(cover_letter_content.keys())}"
-                    )
+                    click.echo(f"📝 Cover letter content keys: {list(cover_letter_content.keys())}")
 
             final_cover_letter = cover_letter_data
 
             # Debug: Log the merged cover letter
             if debug:
-                summary_content = final_cover_letter.get("summary", {}).get(
-                    "content", ""
-                )
+                summary_content = final_cover_letter.get("summary", {}).get("content", "")
                 click.echo(
                     f"\n📝 Merged cover letter summary content length: {len(summary_content)}"
                 )
@@ -921,9 +915,7 @@ def whoami() -> None:
 
         token = _load_token()
         if not token:
-            raise click.ClickException(
-                "Not logged in. Run 'fast-app auth login' first."
-            )
+            raise click.ClickException("Not logged in. Run 'fast-app auth login' first.")
 
         payload = decode_access_token(token)
         user_id = int(payload.get("sub", 0))
