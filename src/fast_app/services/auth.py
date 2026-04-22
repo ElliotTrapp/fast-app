@@ -48,9 +48,7 @@ from ..models.db_models import User
 
 SECRET_KEY = os.environ.get("FAST_APP_JWT_SECRET", "")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(
-    os.environ.get("FAST_APP_JWT_EXPIRE_MINUTES", "1440")
-)
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("FAST_APP_JWT_EXPIRE_MINUTES", "1440"))
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
@@ -63,9 +61,7 @@ def hash_password(password: str) -> str:
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against its bcrypt hash."""
-    return bcrypt.checkpw(
-        plain_password.encode("utf-8"), hashed_password.encode("utf-8")
-    )
+    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
 
 
 def create_access_token(user_id: int, expires_delta: timedelta | None = None) -> str:
@@ -92,7 +88,7 @@ def create_access_token(user_id: int, expires_delta: timedelta | None = None) ->
     if not SECRET_KEY:
         raise ValueError(
             "FAST_APP_JWT_SECRET must be set for authentication. "
-            "Generate one with: python3 -c \"import secrets; print(secrets.token_urlsafe(32))\""
+            'Generate one with: python3 -c "import secrets; print(secrets.token_urlsafe(32))"'
         )
 
     expire = datetime.now(timezone.utc) + (

@@ -148,14 +148,12 @@ class LLMService:
                 model=self.config.llm.model,
                 temperature=self.config.llm.temperature,
                 api_key=self.config.llm.api_key,
-                base_url=self.config.llm.base_url
-                or "https://opencode.ai/zen/go/v1",
+                base_url=self.config.llm.base_url or "https://opencode.ai/zen/go/v1",
             )
 
         else:
             raise ValueError(
-                f"Unknown LLM provider: {provider}. "
-                f"Supported providers: 'ollama', 'opencode-go'"
+                f"Unknown LLM provider: {provider}. Supported providers: 'ollama', 'opencode-go'"
             )
 
     def generate(self, prompt: str, **kwargs) -> str:

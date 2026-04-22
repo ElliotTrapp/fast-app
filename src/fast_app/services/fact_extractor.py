@@ -95,9 +95,7 @@ class FactExtractor:
             This method makes one LLM call per extraction. The cost is
             approximately 500 tokens per extraction (~1 cent with typical models).
         """
-        qa_pairs = "\n".join(
-            f"Q: {q}\nA: {a}" for q, a in zip(questions, answers)
-        )
+        qa_pairs = "\n".join(f"Q: {q}\nA: {a}" for q, a in zip(questions, answers))
 
         logger.llm_call(
             "extract_facts",

@@ -110,9 +110,7 @@ class KnowledgeService:
         else:
             from pathlib import Path
 
-            db_path = self.config.chroma.path or str(
-                Path.home() / ".fast-app" / "chroma"
-            )
+            db_path = self.config.chroma.path or str(Path.home() / ".fast-app" / "chroma")
             Path(db_path).mkdir(parents=True, exist_ok=True)
             self._client = chromadb.PersistentClient(path=db_path)
 
@@ -135,9 +133,7 @@ class KnowledgeService:
                     base_url=self.config.ollama.endpoint,
                 )
             except ImportError:
-                logger.warning(
-                    "langchain-ollama not installed; using default embeddings"
-                )
+                logger.warning("langchain-ollama not installed; using default embeddings")
         elif provider == "opencode-go":
             try:
                 from langchain_openai import OpenAIEmbeddings
@@ -145,13 +141,10 @@ class KnowledgeService:
                 self._embedding_model = OpenAIEmbeddings(
                     model="text-embedding-3-small",
                     api_key=self.config.llm.api_key,
-                    base_url=self.config.llm.base_url
-                    or "https://opencode.ai/zen/go/v1",
+                    base_url=self.config.llm.base_url or "https://opencode.ai/zen/go/v1",
                 )
             except ImportError:
-                logger.warning(
-                    "langchain-openai not installed; using default embeddings"
-                )
+                logger.warning("langchain-openai not installed; using default embeddings")
 
     @property
     def _collection_name(self) -> str:
