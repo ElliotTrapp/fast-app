@@ -49,7 +49,9 @@ class ExtractedFact(BaseModel):
     )
     category: str = Field(
         ...,
-        description="Category: skill, experience, education, certification, preference, personality, goal",
+        description=(
+            "Category: skill, experience, education, certification, preference, personality, goal"
+        ),
     )
     confidence: float = Field(
         ...,

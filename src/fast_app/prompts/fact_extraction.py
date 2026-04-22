@@ -30,7 +30,8 @@ discrete, atomic facts from interview Q&A pairs.
 
 ## Output Format
 Return a JSON object with:
-- "facts": array of objects, each with: content, category, confidence, source_question, source_answer
+- "facts": array of objects, each with: content, category, confidence,
+  source_question, source_answer
 - "summary": brief summary of what was learned (1-2 sentences)
 
 Example output:

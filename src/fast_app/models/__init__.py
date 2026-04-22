@@ -1,4 +1,8 @@
-"""Pydantic models matching Reactive Resume's ResumeData schema."""
+# ruff: noqa: N815
+"""Pydantic models matching Reactive Resume's ResumeData schema.
+
+Field names use camelCase to match the Reactive Resume API schema exactly.
+"""
 
 import uuid
 from typing import Any
