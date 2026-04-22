@@ -1,9 +1,8 @@
 """Tests for retry logic."""
 
-from unittest.mock import Mock, patch, MagicMock
 import asyncio
+from unittest.mock import MagicMock, Mock, patch
 
-import pytest
 import requests
 
 from fast_app.config import OllamaConfig

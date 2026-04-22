@@ -2,6 +2,7 @@
 
 import json
 from unittest.mock import Mock, patch
+
 import pytest
 
 from fast_app.services.job_extractor import JobExtractor
@@ -50,7 +51,6 @@ class TestExtractFromUrlIntegration:
     @pytest.mark.integration
     def test_extracts_job_data_real_async(self, mock_client):
         """Test full extraction flow with real asyncio (integration test)."""
-        import asyncio
 
         # Setup mocks
         mock_fetch_result = Mock()

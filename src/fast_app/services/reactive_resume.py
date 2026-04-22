@@ -32,7 +32,10 @@ def with_retry(
 
                         click.echo(
                             click.style(
-                                f"  ⚠️  API request failed (attempt {attempt + 1}/{max_retries + 1}): {e}",
+                                (
+                                    f"  ⚠️  API request failed "
+                                    f"(attempt {attempt + 1}/{max_retries + 1}): {e}"
+                                ),
                                 fg="yellow",
                             )
                         )
@@ -43,7 +46,8 @@ def with_retry(
                         raise RuntimeError(
                             f"API request failed after {max_retries + 1} attempts.\n"
                             f"  Last error: {e}\n\n"
-                            f"  Suggestion: Check if Reactive Resume is running at {self.base_url}\n"
+                            f"  Suggestion: Check if Reactive Resume is running "
+                            f"at {self.base_url}\n"
                             f"  Verify your API key is valid in config.json"
                         ) from e
                 except Exception as e:
@@ -236,7 +240,8 @@ class ReactiveResumeClient:
         if not resume_id:
             raise RuntimeError(
                 f"Failed to get resume ID from response: {result}\n"
-                f"  Suggestion: The API response format may have changed. Check Reactive Resume version."
+                "  Suggestion: The API response format may have changed. "
+                "Check Reactive Resume version."
             )
 
         logger.success(f"Resume created: {resume_id}")

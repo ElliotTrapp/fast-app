@@ -54,6 +54,18 @@ class JobExtractor:
         logger.api_response(200)
         logger.llm_response(len(content), f"{fetched.title}")
 
+        schema = (
+            '{"title": "string", "company": "string", '
+            '"location": "string or null", "description": "string or null", '
+            '"min_amount": "number or null", "max_amount": "number or null", '
+            '"currency": "string or null", "interval": "string or null", '
+            '"job_type": "string or null", "is_remote": "boolean or null", '
+            '"job_level": "string or null", "job_function": "string or null", '
+            '"skills": "string or null", "company_industry": "string or null", '
+            '"company_url": "string or null", "company_description": "string or null", '
+            '"company_num_employees": "string or null"}'
+        )
+
         prompt = f"""Extract job posting information from this page content and return as JSON.
 
 Page Content:
@@ -79,7 +91,7 @@ Return JSON with these fields (omit fields you cannot find):
 - company_num_employees: Employee count range (e.g., "51-200", "10000+")
 
 Return valid JSON matching this schema:
-{{"title": "string", "company": "string", "location": "string or null", "description": "string or null", "min_amount": "number or null", "max_amount": "number or null", "currency": "string or null", "interval": "string or null", "job_type": "string or null", "is_remote": "boolean or null", "job_level": "string or null", "job_function": "string or null", "skills": "string or null", "company_industry": "string or null", "company_url": "string or null", "company_description": "string or null", "company_num_employees": "string or null"}}
+{schema}
 """
 
         logger.llm_call(

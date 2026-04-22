@@ -48,7 +48,10 @@ def with_retry(
 
                         click.echo(
                             click.style(
-                                f"  ⚠️  Ollama request failed (attempt {attempt + 1}/{max_retries + 1}): {e}",
+                                (
+                                    f"  ⚠️  Ollama request failed "
+                                    f"(attempt {attempt + 1}/{max_retries + 1}): {e}"
+                                ),
                                 fg="yellow",
                             )
                         )
@@ -61,7 +64,8 @@ def with_retry(
                             f"Last error: {e}\n\n"
                             f"Suggestion: Ensure Ollama is running at {self.config.endpoint}\n"
                             f"  Run: ollama serve\n"
-                            f"  Or check if the model '{self.config.model}' is available: ollama list"
+                            f"  Or check if the model '{self.config.model}' "
+                            f"is available: ollama list"
                         ) from e
                 except Exception as e:
                     raise e
