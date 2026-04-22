@@ -131,7 +131,7 @@ class TestFindConfigFile:
             temp_path = f.name
 
         try:
-            result = find_config_file(cli_path=temp_path)
+            find_config_file(cli_path=temp_path)
             assert Path(temp_path).exists()
         finally:
             Path(temp_path).unlink()

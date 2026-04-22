@@ -4,19 +4,19 @@ import asyncio
 import json
 import re
 import time
-from pathlib import Path
 from functools import wraps
+from pathlib import Path
 
 import requests
 from ollama import Client
 from progress.spinner import Spinner
 
-from ..models import ResumeContent, CoverLetterContent, QuestionContent
-from ..prompts.resume import get_resume_prompt
-from ..prompts.questions import get_questions_prompt
-from ..prompts.cover_letter import get_cover_letter_prompt
 from ..config import OllamaConfig
 from ..log import logger
+from ..models import CoverLetterContent, QuestionContent, ResumeContent
+from ..prompts.cover_letter import get_cover_letter_prompt
+from ..prompts.questions import get_questions_prompt
+from ..prompts.resume import get_resume_prompt
 
 
 def with_retry(
@@ -42,7 +42,10 @@ def with_retry(
 
                         click.echo(
                             click.style(
-                                f"  ⚠️  Ollama request failed (attempt {attempt + 1}/{max_retries + 1}): {e}",
+                                (
+                                    f"  ⚠️  Ollama request failed "
+                                    f"(attempt {attempt + 1}/{max_retries + 1}): {e}"
+                                ),
                                 fg="yellow",
                             )
                         )
@@ -55,7 +58,8 @@ def with_retry(
                             f"Last error: {e}\n\n"
                             f"Suggestion: Ensure Ollama is running at {self.config.endpoint}\n"
                             f"  Run: ollama serve\n"
-                            f"  Or check if the model '{self.config.model}' is available: ollama list"
+                            f"  Or check if the model '{self.config.model}' "
+                            f"is available: ollama list"
                         ) from e
                 except Exception as e:
                     raise e

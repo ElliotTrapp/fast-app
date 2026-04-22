@@ -1,23 +1,23 @@
 """Utility modules for fast-app."""
 
-from .profile import (
-    sanitize_name,
-    find_profile_file,
-    find_base_resume_file,
-    find_base_cover_letter_file,
-    load_profile,
-    load_base_resume,
-    load_base_cover_letter,
-)
-from .resume import (
-    merge_resume_with_base,
-    check_existing_resume,
-)
 from .cover_letter import (
-    merge_cover_letter_with_base,
     check_existing_cover_letter,
+    merge_cover_letter_with_base,
 )
 from .interactive import ask_questions_interactive
+from .profile import (
+    find_base_cover_letter_file,
+    find_base_resume_file,
+    find_profile_file,
+    load_base_cover_letter,
+    load_base_resume,
+    load_profile,
+    sanitize_name,
+)
+from .resume import (
+    check_existing_resume,
+    merge_resume_with_base,
+)
 
 __all__ = [
     "sanitize_name",

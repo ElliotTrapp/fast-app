@@ -15,7 +15,6 @@ from fast_app.models import (
 )
 from fast_app.prompts.questions import get_questions_prompt
 from fast_app.prompts.resume import get_resume_prompt
-from fast_app.prompts.cover_letter import get_cover_letter_prompt
 
 
 class TestGetResumePrompt:
@@ -142,7 +141,6 @@ class TestResumeDataModel:
         assert resume.basics.headline == "Engineer"
 
     def test_populates_sections(self):
-        from pydantic import BaseModel
 
         # Get the experience section type
         resume = ResumeData()
