@@ -9,28 +9,30 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
+from ..db import init_db
+from .auth_routes import router as auth_router
 from .background_tasks import process_job
 from .log_stream import log_broadcaster
 from .state import state_manager
 
-# Background task tracking
 current_task: asyncio.Task | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown."""
-    # Startup
     log_broadcaster.setup_logging()
 
-    # Resume any active job
+    try:
+        init_db()
+    except Exception:
+        pass
+
     if state_manager.is_active():
-        # Job was interrupted, reset to idle
         state_manager.reset()
 
     yield
 
-    # Shutdown
     if current_task and not current_task.done():
         current_task.cancel()
 
@@ -41,6 +43,8 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+app.include_router(auth_router)
 
 # Mount static files
 static_dir = Path(__file__).parent.parent / "static"
