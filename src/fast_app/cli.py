@@ -316,21 +316,17 @@ def generate(
 
                 # Debug: Log the cover letter content
                 if debug:
-                    content_len = len(cover_letter_content.get('content', ''))
-                    click.echo(
-                        f"\n📝 Generated cover letter content length: {content_len}"
-                    )
+                    content_len = len(cover_letter_content.get("content", ""))
+                    click.echo(f"\n📝 Generated cover letter content length: {content_len}")
                     click.echo(f"📝 Cover letter content keys: {list(cover_letter_content.keys())}")
 
             final_cover_letter = cover_letter_data
 
             # Debug: Log the merged cover letter
             if debug:
-                summary_content = final_cover_letter.get('summary', {})
-                summary_len = len(summary_content.get('content', ''))
-                click.echo(
-                    f"\n📝 Merged cover letter summary content length: {summary_len}"
-                )
+                summary_content = final_cover_letter.get("summary", {})
+                summary_len = len(summary_content.get("content", ""))
+                click.echo(f"\n📝 Merged cover letter summary content length: {summary_len}")
 
         # ============================================
         # PHASE 2: Create/update in Reactive Resume
