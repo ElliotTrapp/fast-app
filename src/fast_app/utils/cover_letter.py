@@ -1,7 +1,6 @@
 """Cover letter specific utilities."""
 
 import copy
-import json
 import uuid
 from typing import Any
 

@@ -59,7 +59,10 @@ def retry_with_backoff(
 
                         click.echo(
                             click.style(
-                                f"  ⚠️  Attempt {attempt + 1}/{max_retries + 1} failed: {e}. Retrying in {delay:.1f}s...",
+                                (
+                                    f"  ⚠️  Attempt {attempt + 1}/{max_retries + 1} "
+                                    f"failed: {e}. Retrying in {delay:.1f}s..."
+                                ),
                                 fg="yellow",
                             )
                         )

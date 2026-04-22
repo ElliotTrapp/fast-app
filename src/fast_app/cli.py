@@ -316,18 +316,17 @@ def generate(
 
                 # Debug: Log the cover letter content
                 if debug:
-                    click.echo(
-                        f"\n📝 Generated cover letter content length: {len(cover_letter_content.get('content', ''))}"
-                    )
+                    content_len = len(cover_letter_content.get("content", ""))
+                    click.echo(f"\n📝 Generated cover letter content length: {content_len}")
                     click.echo(f"📝 Cover letter content keys: {list(cover_letter_content.keys())}")
 
             final_cover_letter = cover_letter_data
 
             # Debug: Log the merged cover letter
             if debug:
-                click.echo(
-                    f"\n📝 Merged cover letter summary content length: {len(final_cover_letter.get('summary', {}).get('content', ''))}"
-                )
+                summary_content = final_cover_letter.get("summary", {})
+                summary_len = len(summary_content.get("content", ""))
+                click.echo(f"\n📝 Merged cover letter summary content length: {summary_len}")
 
         # ============================================
         # PHASE 2: Create/update in Reactive Resume
@@ -390,7 +389,7 @@ def generate(
             )
 
             if existing_cl_id and not overwrite_resume:
-                print(f"EXISTS")
+                print("EXISTS")
                 logger.error(f"Cover letter '{cover_letter_title}' already exists")
                 raise click.ClickException(
                     f"Cover letter '{cover_letter_title}' already exists. "
@@ -727,8 +726,9 @@ def serve(host: str, port: int, config: str | None) -> None:
     Launches a web interface for generating resumes.
     Checks connections and configuration before starting.
     """
-    import uvicorn
     from pathlib import Path
+
+    import uvicorn
 
     try:
         # Load configuration
@@ -793,7 +793,7 @@ def serve(host: str, port: int, config: str | None) -> None:
 
         click.echo()
         click.echo(click.style("=" * 60, fg="cyan"))
-        click.echo(click.style(f"🚀 Fast-App server starting", fg="green", bold=True))
+        click.echo(click.style("🚀 Fast-App server starting", fg="green", bold=True))
         click.echo(click.style(f"   http://{host}:{port}", fg="cyan"))
         click.echo(click.style("=" * 60, fg="cyan"))
         click.echo()
