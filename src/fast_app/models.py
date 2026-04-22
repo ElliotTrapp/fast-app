@@ -3,7 +3,7 @@
 import uuid
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 def generate_id() -> str:
@@ -291,6 +291,44 @@ class Sections(BaseModel):
     publications: PublicationSection = Field(default_factory=PublicationSection)
     volunteer: VolunteerSection = Field(default_factory=VolunteerSection)
     references: ReferenceSection = Field(default_factory=ReferenceSection)
+
+    @model_validator(mode="after")
+    def validate_unique_companies(self) -> "Sections":
+        """Ensure each experience entry has a unique company name.
+
+        When the LLM generates multiple positions at the same company,
+        they should be grouped into ONE ExperienceItem with multiple roles,
+        not separate ExperienceItem entries with the same company name.
+
+        Raises:
+            ValueError: If duplicate company names are found in experience.
+        """
+        companies_seen: dict[str, str] = {}
+        duplicates: list[tuple[str, str]] = []
+
+        for item in self.experience.items:
+            company = item.company.strip().lower()
+            if not company:
+                continue
+            if company in companies_seen:
+                duplicates.append((companies_seen[company], item.company or "(empty)"))
+            else:
+                companies_seen[company] = item.company
+
+        if duplicates:
+            dup_list = ", ".join(f"'{orig}' vs '{dup}'" for orig, dup in duplicates)
+            raise ValueError(
+                f"DUPLICATE COMPANIES DETECTED: {dup_list}. "
+                f"When multiple positions exist at the same company, use the 'roles' "
+                f"array instead of creating separate experience entries. "
+                f"Each ExperienceItem must have a unique 'company' field. "
+                f"Example correct structure:\n"
+                f'  {{ "company": "NASA JPL", "roles": ['
+                f'    {{ "position": "Team Lead", "description": "..." }}, '
+                f'    {{ "position": "Engineer", "description": "..." }}'
+                f"  ]}}"
+            )
+        return self
 
 
 class Colors(BaseModel):

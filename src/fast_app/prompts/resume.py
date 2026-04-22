@@ -56,19 +56,47 @@ The resume MUST fit on a SINGLE A4 page when formatted. This means:
 - Keep bullet points BRIEF and impactful (aim for 3-5 bullets per role)
 - PRIORITIZE content by relevance to THIS specific job
 
+## Experience Structure - CRITICAL
+When the candidate has MULTIPLE POSITIONS at the SAME COMPANY (e.g., multiple roles at NASA JPL):
+- Create ONE ExperienceItem per unique company
+- Put ALL positions at that company into the 'roles' array
+- Each RoleItem has: position, period, description (the bullet points for THAT role)
+- DO NOT create separate ExperienceItems for each position at the same company
+
+Example correct structure:
+{{
+  "company": "NASA Jet Propulsion Laboratory",
+  "location": "Pasadena, CA",
+  "roles": [
+    {{
+      "position": "Team Lead",
+      "period": "Jan 2020 - June 2025",
+      "description": "<ul><li>Bullet for Team Lead role only</li></ul>"
+    }},
+    {{
+      "position": "Software Engineer",
+      "period": "Jan 2018 - Dec 2019",
+      "description": "<ul><li>Bullet for Software Engineer role only</li></ul>"
+    }}
+  ]
+}}
+
 ## Instructions
 1. SELECT ONLY the most RELEVANT experiences that match THIS job's requirements
-2. ORDER skills by relevance to the job requirements
-3. Write a TIGHT, FOCUSED summary (2-3 sentences max) highlighting fit for this role
-4. FORMAT descriptions as HTML bullet lists: <ul><li>...</li></ul>
-5. For each skill group, include the name and keywords list
-6. Generate UUIDs for all 'id' fields (use format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
-7. Set all 'hidden' fields to false
+2. GROUP positions at the same company into ONE ExperienceItem with multiple roles
+3. ORDER skills by relevance to the job requirements
+4. Write a TIGHT, FOCUSED summary (2-3 sentences max) highlighting fit for this role
+5. FORMAT descriptions as HTML bullet lists: <ul><li>...</li></ul>
+6. For each skill group, include the name and keywords list
+7. Generate UUIDs for all 'id' fields (use format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+8. Set all 'hidden' fields to false
+9. Preserve EXACT bullet points from profile for each role - do NOT mix bullets
 
 ## Critical Constraints
 - Return ONLY valid JSON matching this schema
 - The resume MUST be concise enough to fit ONE A4 page
 - No additional text outside the JSON
+- GROUP same-company positions into ONE ExperienceItem with multiple RoleItems
 
 ## Schema Overview
 {ResumeContent.model_json_schema()}
