@@ -37,10 +37,10 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
+import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlmodel import Session
 
 from ..db import get_session
@@ -52,46 +52,20 @@ ACCESS_TOKEN_EXPIRE_MINUTES = int(
     os.environ.get("FAST_APP_JWT_EXPIRE_MINUTES", "1440")
 )
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
 
 
 def hash_password(password: str) -> str:
-    """Hash a password using bcrypt with cost factor 12.
-
-    bcrypt is deliberately slow (~400ms per hash) to resist brute-force attacks.
-    The salt is automatically generated and embedded in the output hash string.
-
-    Args:
-        password: The plaintext password to hash.
-
-    Returns:
-        The bcrypt hash string (format: $2b$12$...).
-
-    Example:
-        >>> hash = hash_password("my_secure_password")
-        >>> hash.startswith("$2b$12$")
-        True
-    """
-    return pwd_context.hash(password)
+    """Hash a password using bcrypt with cost factor 12."""
+    salt = bcrypt.gensalt(rounds=12)
+    return bcrypt.hashpw(password.encode("utf-8"), salt).decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a plaintext password against a bcrypt hash.
-
-    Args:
-        plain_password: The password to check.
-        hashed_password: The stored bcrypt hash.
-
-    Returns:
-        True if the password matches, False otherwise.
-
-    Note:
-        This function always takes ~400ms regardless of the outcome,
-        which helps prevent timing attacks when used correctly.
-    """
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verify a password against its bcrypt hash."""
+    return bcrypt.checkpw(
+        plain_password.encode("utf-8"), hashed_password.encode("utf-8")
+    )
 
 
 def create_access_token(user_id: int, expires_delta: timedelta | None = None) -> str:

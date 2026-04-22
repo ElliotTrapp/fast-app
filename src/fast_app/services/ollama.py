@@ -1,4 +1,10 @@
-"""Ollama service for resume generation."""
+"""Ollama service for resume generation.
+
+Delegates generation methods to LLMService when LangChain is available,
+falls back to direct Ollama SDK calls when it's not. Connection-related
+methods (check_connection, check_model_available, ensure_model_available)
+always use the direct Ollama SDK regardless of LangChain availability.
+"""
 
 import asyncio
 import json
@@ -11,7 +17,7 @@ import requests
 from ollama import Client
 from progress.spinner import Spinner
 
-from ..config import OllamaConfig
+from ..config import Config, OllamaConfig
 from ..log import logger
 from ..models import CoverLetterContent, QuestionContent, ResumeContent
 from ..prompts.cover_letter import get_cover_letter_prompt
@@ -78,12 +84,49 @@ def _run_async(coro):
 
 
 class OllamaService:
-    """Service for interacting with Ollama for resume generation."""
+    """Service for interacting with Ollama for resume generation.
 
-    def __init__(self, config: OllamaConfig):
-        self.config = config
-        headers = {"Authorization": f"Bearer {config.api_key}"} if config.api_key else None
-        self.client = Client(host=config.endpoint, headers=headers)
+    Delegates generation methods to LLMService when LangChain is available,
+    falls back to direct Ollama SDK calls when it's not.
+
+    Args:
+        config: OllamaConfig for direct SDK access, or full Config for
+            LLMService delegation. When OllamaConfig is passed, a Config
+            with default LLMConfig (provider="ollama") is constructed
+            for LLMService if LangChain is available.
+    """
+
+    def __init__(self, config: OllamaConfig | Config):
+        # Handle both OllamaConfig and Config for backward compatibility
+        if isinstance(config, Config):
+            self._full_config = config
+            self.config = config.ollama
+        else:
+            self._full_config = None
+            self.config = config
+
+        headers = (
+            {"Authorization": f"Bearer {self.config.api_key}"} if self.config.api_key else None
+        )
+        self.client = Client(host=self.config.endpoint, headers=headers)
+
+        # Try to create LLMService for delegation when LangChain is available
+        self._llm_service = None
+        try:
+            from .llm_service import LLMService
+
+            if self._full_config is not None:
+                self._llm_service = LLMService(self._full_config)
+            else:
+                # Construct a Config from OllamaConfig for LLMService.
+                # LLMConfig defaults to provider="ollama" which uses ChatOllama
+                # with the same endpoint and model from OllamaConfig.
+                full_config = Config(ollama=self.config)
+                self._llm_service = LLMService(full_config)
+        except (ImportError, ValueError):
+            # LangChain not installed or provider misconfigured —
+            # fall back to direct Ollama SDK calls
+            self._llm_service = None
 
     def _strip_markdown_json(self, content: str) -> str:
         """Strip markdown code blocks from LLM response if present."""
@@ -267,6 +310,12 @@ class OllamaService:
         spinner_thread.start()
 
         try:
+            try:
+                if self._llm_service is not None:
+                    result = self._llm_service.generate_questions(job_data, profile_data)
+                    return result
+            except Exception:
+                pass
             result = _run_async(self._generate_questions_async(job_data, profile_data))
             return result
         finally:
@@ -378,6 +427,14 @@ class OllamaService:
         spinner_thread.start()
 
         try:
+            try:
+                if self._llm_service is not None:
+                    result = self._llm_service.generate_cover_letter(
+                        job_data, profile_data, questions=questions, answers=answers
+                    )
+                    return result
+            except Exception:
+                pass
             result = _run_async(
                 self._generate_cover_letter_async(
                     job_data, profile_data, questions, answers, output_path
@@ -498,6 +555,14 @@ class OllamaService:
         spinner_thread.start()
 
         try:
+            try:
+                if self._llm_service is not None:
+                    result = self._llm_service.generate_resume(
+                        job_data, profile_data, questions=questions, answers=answers
+                    )
+                    return result
+            except Exception:
+                pass
             result = _run_async(
                 self._generate_resume_async(job_data, profile_data, questions, answers, output_path)
             )

@@ -53,9 +53,9 @@ def get_questions_template() -> ChatPromptTemplate:
     question generation (Phase 4).
 
     Returns:
-        ChatPromptTemplate with variables: job_data, profile_data, knowledge_context
+        ChatPromptTemplate with variables: job_data, profile_data, knowledge_section
     """
-    return ChatPromptTemplate.from_messages(
+    template = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
@@ -74,6 +74,7 @@ def get_questions_template() -> ChatPromptTemplate:
             ),
         ]
     )
+    return template.partial(knowledge_section="")
 
 
 def get_questions_knowledge_section(knowledge_context: list[str] | None) -> str:
@@ -108,7 +109,7 @@ def get_resume_template() -> ChatPromptTemplate:
     Returns:
         ChatPromptTemplate with variables: job_data, profile_data, questions, answers
     """
-    return ChatPromptTemplate.from_messages(
+    template = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
@@ -126,6 +127,7 @@ def get_resume_template() -> ChatPromptTemplate:
             ),
         ]
     )
+    return template.partial(qa_section="No additional questions were asked.")
 
 
 def get_resume_qa_section(questions: list[str], answers: list[str]) -> str:
@@ -155,7 +157,7 @@ def get_cover_letter_template() -> ChatPromptTemplate:
     Returns:
         ChatPromptTemplate with variables: job_data, profile_data, questions, answers
     """
-    return ChatPromptTemplate.from_messages(
+    template = ChatPromptTemplate.from_messages(
         [
             (
                 "system",
@@ -173,6 +175,7 @@ def get_cover_letter_template() -> ChatPromptTemplate:
             ),
         ]
     )
+    return template.partial(qa_section="No additional questions were asked.")
 
 
 def get_fact_extraction_template() -> ChatPromptTemplate:
