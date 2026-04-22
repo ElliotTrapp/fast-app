@@ -29,9 +29,6 @@ See: docs/adr/007-cli-first-architecture.md, docs/guide/auth-setup.md
 
 from __future__ import annotations
 
-from datetime import timedelta
-from typing import Annotated
-
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlmodel import Session, select
 

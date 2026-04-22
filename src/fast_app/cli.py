@@ -390,7 +390,7 @@ def generate(
             )
 
             if existing_cl_id and not overwrite_resume:
-                print(f"EXISTS")
+                print("EXISTS")
                 logger.error(f"Cover letter '{cover_letter_title}' already exists")
                 raise click.ClickException(
                     f"Cover letter '{cover_letter_title}' already exists. "
@@ -727,8 +727,9 @@ def serve(host: str, port: int, config: str | None) -> None:
     Launches a web interface for generating resumes.
     Checks connections and configuration before starting.
     """
-    import uvicorn
     from pathlib import Path
+
+    import uvicorn
 
     try:
         # Load configuration
@@ -793,7 +794,7 @@ def serve(host: str, port: int, config: str | None) -> None:
 
         click.echo()
         click.echo(click.style("=" * 60, fg="cyan"))
-        click.echo(click.style(f"🚀 Fast-App server starting", fg="green", bold=True))
+        click.echo(click.style("🚀 Fast-App server starting", fg="green", bold=True))
         click.echo(click.style(f"   http://{host}:{port}", fg="cyan"))
         click.echo(click.style("=" * 60, fg="cyan"))
         click.echo()

@@ -230,8 +230,8 @@ class LLMService:
             The knowledge_context parameter is added in Phase 4 to enable
             knowledge-informed question generation.
         """
-        from ..prompts.templates import get_questions_template
         from ..models import QuestionContent
+        from ..prompts.templates import get_questions_template
 
         template = get_questions_template()
         chain = template | self._llm | self._structured_output(QuestionContent)
@@ -273,8 +273,8 @@ class LLMService:
         Returns:
             ResumeContent as a dict.
         """
-        from ..prompts.templates import get_resume_template
         from ..models import ResumeContent
+        from ..prompts.templates import get_resume_template
 
         template = get_resume_template()
         chain = template | self._llm | self._structured_output(ResumeContent)
@@ -321,8 +321,8 @@ class LLMService:
         Returns:
             CoverLetterContent as a dict.
         """
-        from ..prompts.templates import get_cover_letter_template
         from ..models import CoverLetterContent
+        from ..prompts.templates import get_cover_letter_template
 
         template = get_cover_letter_template()
         chain = template | self._llm | self._structured_output(CoverLetterContent)

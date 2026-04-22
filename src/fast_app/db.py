@@ -36,9 +36,8 @@ See: docs/adr/003-sqlmodel-sqlite-auth.md
 """
 
 import os
-from datetime import datetime
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
 
 from sqlmodel import Session, SQLModel, create_engine
 

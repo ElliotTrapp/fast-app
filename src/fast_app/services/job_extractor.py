@@ -3,11 +3,12 @@
 import asyncio
 import hashlib
 import re
+
 from ollama import Client
 from progress.spinner import Spinner
 
-from ..models import JobData
 from ..log import logger
+from ..models import JobData
 
 
 def _run_async(coro):

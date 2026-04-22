@@ -46,7 +46,6 @@ See: docs/adr/002-chromadb-vector-memory.md, docs/guide/knowledge.md
 
 from __future__ import annotations
 
-import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any

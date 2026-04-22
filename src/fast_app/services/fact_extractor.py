@@ -45,9 +45,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from ..config import Config
 from ..log import logger
-from ..models.knowledge import ExtractedFact, FactExtractionResult
+from ..models.knowledge import FactExtractionResult
 
 
 class FactExtractor:

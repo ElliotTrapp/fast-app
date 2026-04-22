@@ -454,3 +454,8 @@ class ProfileData(BaseModel):
     publications: list[dict[str, Any]] = Field(default_factory=list)
     preferences: dict[str, Any] | None = None
     narrative: dict[str, Any] | None = None
+
+
+# Optional submodules (require [auth] or [knowledge] deps):
+#   from fast_app.models.db_models import User, UserProfile
+#   from fast_app.models.knowledge import ExtractedFact, KnowledgeSearchResult

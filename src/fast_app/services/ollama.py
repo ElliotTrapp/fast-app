@@ -4,19 +4,19 @@ import asyncio
 import json
 import re
 import time
-from pathlib import Path
 from functools import wraps
+from pathlib import Path
 
 import requests
 from ollama import Client
 from progress.spinner import Spinner
 
-from ..models import ResumeContent, CoverLetterContent, QuestionContent
-from ..prompts.resume import get_resume_prompt
-from ..prompts.questions import get_questions_prompt
-from ..prompts.cover_letter import get_cover_letter_prompt
 from ..config import OllamaConfig
 from ..log import logger
+from ..models import CoverLetterContent, QuestionContent, ResumeContent
+from ..prompts.cover_letter import get_cover_letter_prompt
+from ..prompts.questions import get_questions_prompt
+from ..prompts.resume import get_resume_prompt
 
 
 def with_retry(
