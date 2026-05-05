@@ -1180,12 +1180,18 @@ def profile_list(config_path: str | None) -> None:
 @click.argument("path", type=click.Path(exists=True))
 @click.option("--name", "-n", default="Imported", help="Profile name (default: Imported)")
 @click.option("--default", "is_default", is_flag=True, help="Set as default profile")
+@click.option("--extract-facts", is_flag=True, help="Extract knowledge facts from imported profile")
 @click.option("--config", "-c", "config_path", default=None, help="Config file path")
-def profile_import(path: str, name: str, is_default: bool, config_path: str | None) -> None:
+def profile_import(
+    path: str, name: str, is_default: bool, extract_facts: bool, config_path: str | None
+) -> None:
     """Import a profile from a JSON file.
 
     \b
     PATH  Path to the profile JSON file to import.
+
+    Use --extract-facts to distill the profile into knowledge facts
+    stored in ChromaDB for use in future question generation.
     """
     try:
         from .db import get_session, init_db
@@ -1207,6 +1213,50 @@ def profile_import(path: str, name: str, is_default: bool, config_path: str | No
         click.echo(click.style(f"✓ Imported profile '{result.name}' (ID: {result.id})", fg="green"))
         if is_default:
             click.echo(click.style("  Set as default profile", fg="green"))
+
+        if extract_facts:
+            try:
+                from .services.fact_extractor import FactExtractor
+                from .services.knowledge import KnowledgeService
+                from .services.llm_service import LLMService
+
+                config = load_config(config_path)
+                llm_service = LLMService(config)
+                extractor = FactExtractor(llm_service)
+
+                profile_dict = json.loads(result.profile_data)
+
+                provider_name = config.llm.provider
+                click.echo(f"  Extracting facts via {provider_name} (this may take a minute)...")
+
+                extraction = extractor.extract_facts_from_profile(profile_dict)
+
+                if extraction.facts:
+                    knowledge_svc = KnowledgeService(config, user_id=user_id)
+                    stored_ids = knowledge_svc.store_facts(
+                        extraction.facts,
+                        source="profile_import",
+                    )
+                    click.echo(
+                        click.style(
+                            f"  Extracted and stored {len(stored_ids)} facts from profile",
+                            fg="green",
+                        )
+                    )
+                else:
+                    click.echo("  No extractable facts found in profile")
+
+            except ImportError:
+                click.echo(
+                    click.style(
+                        "  Skipping fact extraction: knowledge deps not installed. "
+                        "Install with: pip install -e '.[knowledge,llm]'",
+                        fg="yellow",
+                    )
+                )
+            except Exception as e:
+                logger.error(f"Error extracting facts from profile: {e}")
+                click.echo(click.style(f"  Warning: fact extraction failed: {e}", fg="yellow"))
 
     except FileNotFoundError as e:
         raise click.ClickException(str(e))
@@ -1378,6 +1428,12 @@ def knowledge_search(
 
     \b
     QUERY  Natural language search string.
+
+    \b
+    Examples:
+      fast-app knowledge search "python experience"
+      fast-app knowledge search "leadership" --category experience
+      fast-app knowledge search "distributed systems" -n 10
     """
     try:
         from .services.knowledge import KnowledgeService
@@ -1396,6 +1452,7 @@ def knowledge_search(
         for i, result in enumerate(results, 1):
             distance_str = f" (distance: {result.distance:.4f})" if result.distance else ""
             click.echo(f"  {i}. [{result.category}] {result.content}{distance_str}")
+            click.echo(f"     ID: {result.id}")
             if result.source:
                 click.echo(f"     Source: {result.source}")
             if result.confidence:
@@ -1436,6 +1493,7 @@ def knowledge_list(category: str | None, limit: int, config_path: str | None) ->
 
         for i, fact in enumerate(facts, 1):
             click.echo(f"  {i}. [{fact.category}] {fact.content}")
+            click.echo(f"     ID: {fact.id}")
             if fact.source:
                 click.echo(f"     Source: {fact.source}")
             if fact.confidence:
@@ -1457,8 +1515,15 @@ def knowledge_list(category: str | None, limit: int, config_path: str | None) ->
 def knowledge_delete(ids: str, config_path: str | None) -> None:
     """Delete knowledge facts by comma-separated IDs.
 
+    Use the ID shown by 'fast-app knowledge list' (UUID).
+
     \b
     IDS  Comma-separated list of fact IDs to delete.
+
+    \b
+    Examples:
+      fast-app knowledge delete a1b2c3d4-e5f6-7890-abcd-ef1234567890
+      fast-app knowledge delete id1,id2,id3
     """
     try:
         from .services.knowledge import KnowledgeService
