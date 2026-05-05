@@ -33,7 +33,25 @@ def main():
 
 
 @main.command()
-@click.argument("url")
+@click.argument("url", required=False)
+@click.option(
+    "--text",
+    "-t",
+    "job_title",
+    default=None,
+    help="Job title for text input mode (use instead of URL)",
+)
+@click.option(
+    "--content",
+    default=None,
+    help="Job description text (required with --text)",
+)
+@click.option(
+    "--job-url",
+    "job_url_opt",
+    default=None,
+    help="Original job URL for metadata (optional, used with --text)",
+)
 @click.option(
     "--profile",
     "-p",
@@ -104,8 +122,27 @@ def main():
     is_flag=True,
     help="Skip interactive questions (use cached answers if available)",
 )
+@click.option(
+    "--provider",
+    type=click.Choice(["ollama", "opencode-go"]),
+    default=None,
+    help="LLM provider (overrides config)",
+)
+@click.option(
+    "--no-knowledge",
+    is_flag=True,
+    help="Disable knowledge features (no fact extraction or injection)",
+)
+@click.option(
+    "--review-facts",
+    is_flag=True,
+    help="Review extracted facts before storing",
+)
 def generate(
-    url: str,
+    url: str | None,
+    job_title: str | None,
+    content: str | None,
+    job_url_opt: str | None,
     profile_path: str | None,
     base_path: str | None,
     config_path: str | None,
@@ -118,17 +155,39 @@ def generate(
     skip_cover_letter: bool,
     base_cover_letter: str | None,
     skip_questions: bool,
+    provider: str | None,
+    no_knowledge: bool,
+    review_facts: bool,
 ) -> None:
-    """Generate and import resume for job URL.
+    """Generate and import resume for a job URL or pasted description.
 
-    Generates a tailored resume and cover letter for the given job URL.
-    Creates Reactive Resume entries via API.
+    \b
+    URL mode:  fast-app generate https://example.com/job
+    Text mode: fast-app generate --text "Job Title" --content "Job description..."
+
+    When --text and --content are provided, the job description is used
+    directly instead of fetching from a URL. Use --job-url to optionally
+    store the original URL for metadata.
     """
+    # Validate input mode
+    if not url and not (job_title and content):
+        raise click.ClickException(
+            "Provide a job URL or use --text and --content to paste a job description."
+        )
+    if url and (job_title or content):
+        raise click.ClickException(
+            "Cannot use both URL and --text/--content. "
+            "Provide either a URL or text input, not both."
+        )
     try:
         # Load configuration
         config = load_config(config_path)
         if api_key:
             config.resume.api_key = api_key
+
+        # Override LLM provider if specified
+        if provider:
+            config.llm.provider = provider
 
         # Enable debug logging if requested
         if debug:
@@ -155,9 +214,17 @@ def generate(
 
         # Initialize cache
         output_dir = Path.cwd() / config.output.directory
+        cache = CacheManager(output_dir)
 
-        # Extract job ID from URL hash
-        job_id = generate_job_id(url)
+        # Determine input mode and extract job data
+        text_mode = bool(job_title and content)
+
+        if text_mode:
+            job_id = generate_job_id(content)
+            effective_url = job_url_opt or ""
+        else:
+            job_id = generate_job_id(url)
+            effective_url = url
 
         # Check if we've already cached this job
         used_cache = False
@@ -165,38 +232,43 @@ def generate(
         questions = []
         answers = []
         job_dir = None
-        cache = CacheManager(output_dir)
 
-        existing_job_dir = cache.has_cached_job(url)
-        if existing_job_dir and not force:
-            used_cache = True
-            job_data = cache.get_cached_job(existing_job_dir)
-            job_description = job_data.get("description", "")
-            raw_title = job_data.get("title", "Unknown")
-            raw_company = job_data.get("company", "Unknown")
-            job_title = sanitize_name(raw_title)
-            company = sanitize_name(raw_company)
-            job_dir = existing_job_dir
+        if not text_mode:
+            existing_job_dir = cache.has_cached_job(url)
+            if existing_job_dir and not force:
+                used_cache = True
+                job_data = cache.get_cached_job(existing_job_dir)
+                job_description = job_data.get("description", "")
+                raw_title = job_data.get("title", "Unknown")
+                raw_company = job_data.get("company", "Unknown")
+                job_title = sanitize_name(raw_title)
+                company = sanitize_name(raw_company)
+                job_dir = existing_job_dir
 
-            logger.cache_hit("job", str(existing_job_dir))
-            if verbose and not debug:
-                logger.success("Using cached job data")
+                logger.cache_hit("job", str(existing_job_dir))
+                if verbose and not debug:
+                    logger.success("Using cached job data")
 
-            # Check for cached questions/answers
-            if not skip_questions:
-                questions_path = existing_job_dir / "questions.json"
-                answers_path = existing_job_dir / "answers.json"
+                # Check for cached questions/answers
+                if not skip_questions:
+                    questions_path = existing_job_dir / "questions.json"
+                    answers_path = existing_job_dir / "answers.json"
 
-                if questions_path.exists() and answers_path.exists():
-                    questions = cache.get_cached_questions(existing_job_dir) or []
-                    answers = cache.get_cached_answers(existing_job_dir) or []
-                    logger.cache_hit("questions", str(questions_path))
-                    logger.cache_hit("answers", str(answers_path))
-                    if verbose and not debug:
-                        logger.success("Using cached questions and answers")
+                    if questions_path.exists() and answers_path.exists():
+                        questions = cache.get_cached_questions(existing_job_dir) or []
+                        answers = cache.get_cached_answers(existing_job_dir) or []
+                        logger.cache_hit("questions", str(questions_path))
+                        logger.cache_hit("answers", str(answers_path))
+                        if verbose and not debug:
+                            logger.success("Using cached questions and answers")
 
         if not used_cache:
-            job_data = JobExtractor(ollama.client, config.ollama.model).extract_from_url(url)
+            extractor = JobExtractor(ollama.client, config.ollama.model)
+            if text_mode:
+                job_data = extractor.extract_from_text(job_title, content, url=effective_url)
+            else:
+                job_data = extractor.extract_from_url(url)
+
             raw_title = job_data.get("title", "Unknown")
             raw_company = job_data.get("company", "Unknown")
             job_title = sanitize_name(raw_title)
@@ -227,7 +299,30 @@ def generate(
                     if verbose and not debug:
                         logger.success("Using cached questions and answers")
                 else:
-                    questions = ollama.generate_questions(job_data, profile)
+                    knowledge_facts = None
+                    if not no_knowledge:
+                        try:
+                            from .services.knowledge import KnowledgeService
+
+                            knowledge_svc = KnowledgeService(
+                                config, user_id=_get_user_id(config_path)
+                            )
+                            results = knowledge_svc.query_facts(
+                                f"{job_data.get('title', '')} "
+                                f"{job_data.get('description', '')[:200]}",
+                                n=5,
+                            )
+                            if results:
+                                knowledge_facts = [r.content for r in results]
+                                logger.info(f"Injected {len(results)} facts from knowledge base")
+                        except ImportError:
+                            pass
+                        except Exception:
+                            pass
+
+                    questions = ollama.generate_questions(
+                        job_data, profile, knowledge_context=knowledge_facts
+                    )
                     if questions:
                         cache.save_questions(job_dir, questions)
                         logger.cache_save("questions", str(questions_path))
@@ -239,6 +334,43 @@ def generate(
                         logger.cache_save("answers", str(answers_path))
                         if verbose and not debug:
                             click.echo("   💾 Saved: answers.json")
+
+                        if not no_knowledge and questions and answers:
+                            try:
+                                from .services.fact_extractor import FactExtractor
+                                from .services.knowledge import KnowledgeService
+                                from .services.llm_service import LLMService
+
+                                llm_service = LLMService(config)
+                                fact_extractor = FactExtractor(llm_service)
+                                result = fact_extractor.extract_facts_from_answers(
+                                    questions, answers, profile_data=profile, job_data=job_data
+                                )
+                                if result.facts:
+                                    if review_facts:
+                                        click.echo("\n📝 Extracted facts:")
+                                        for i, fact in enumerate(result.facts, 1):
+                                            click.echo(f"  {i}. [{fact.category}] {fact.content}")
+                                        if not click.confirm("Store these facts?"):
+                                            click.echo("   Skipping fact storage.")
+                                            result = None
+
+                                    if result and result.facts:
+                                        knowledge_svc = KnowledgeService(
+                                            config, user_id=_get_user_id(config_path)
+                                        )
+                                        stored_ids = knowledge_svc.store_facts(
+                                            result.facts, job_url=effective_url or url or ""
+                                        )
+                                        logger.success(
+                                            f"Stored {len(stored_ids)} facts in knowledge base"
+                                        )
+                            except ImportError:
+                                logger.warning(
+                                    "Knowledge dependencies not installed, skipping fact extraction"
+                                )
+                            except Exception as e:
+                                logger.warning(f"Fact extraction failed: {e}")
                     else:
                         logger.warning("No questions generated, proceeding with resume creation.")
 
@@ -357,7 +489,7 @@ def generate(
             )
 
         # Add notes with URL and description to resume
-        final_resume["metadata"]["notes"] = f"{url}\n\n{job_description}"
+        final_resume["metadata"]["notes"] = f"{effective_url}\n\n{job_description}"
 
         click.echo("\n🚀 Creating resume in Reactive Resume...")
 
@@ -398,7 +530,7 @@ def generate(
                 )
 
             # Add notes with URL and description to cover letter
-            final_cover_letter["metadata"]["notes"] = f"{url}\n\n{job_description}"
+            final_cover_letter["metadata"]["notes"] = f"{effective_url}\n\n{job_description}"
 
             click.echo("\n🚀 Creating cover letter in Reactive Resume...")
 
@@ -978,6 +1110,449 @@ def _remove_token() -> None:
     token_path = _token_path()
     if token_path.exists():
         token_path.unlink()
+
+
+def _get_user_id(config_path: str | None) -> int:
+    """Get the current user ID from the stored auth token.
+
+    Falls back to user_id=1 when auth is disabled (no token or no JWT secret).
+    """
+    token = _load_token()
+    if token:
+        try:
+            from .services.auth import SECRET_KEY, decode_access_token
+
+            if SECRET_KEY:
+                payload = decode_access_token(token)
+                return int(payload.get("sub", 1))
+        except (ValueError, Exception):
+            pass
+    return 1
+
+
+# ── Profile command group ────────────────────────────────────────────────────
+
+
+@main.group()
+def profile():
+    """Profile management commands (list, import, export, set-default, delete)."""
+    pass
+
+
+@profile.command("list")
+@click.option("--config", "-c", "config_path", default=None, help="Config file path")
+def profile_list(config_path: str | None) -> None:
+    """List all profiles for the current user."""
+    try:
+        from .db import get_session, init_db
+        from .services.profile_service import ProfileService
+
+        init_db()
+        session = next(get_session())
+        user_id = _get_user_id(config_path)
+        service = ProfileService()
+        profiles = service.list_profiles(user_id=user_id, session=session)
+
+        if not profiles:
+            click.echo("No profiles found.")
+            return
+
+        click.echo(f"\n📋 Profiles for user {user_id}:\n")
+        click.echo(f"  {'ID':<6} {'Name':<25} {'Default':<10} {'Created'}")
+        click.echo("  " + "─" * 70)
+
+        for p in profiles:
+            default_marker = "✓" if p.is_default else ""
+            click.echo(f"  {p.id:<6} {p.name:<25} {default_marker:<10} {p.created_at}")
+
+        click.echo()
+
+    except ImportError as e:
+        raise click.ClickException(
+            f"Missing dependency: {e}. Install with: pip install -e '.[auth]'"
+        )
+    except Exception as e:
+        logger.error(f"Error listing profiles: {e}")
+        raise click.ClickException(f"Error listing profiles: {e}")
+
+
+@profile.command("import")
+@click.argument("path", type=click.Path(exists=True))
+@click.option("--name", "-n", default="Imported", help="Profile name (default: Imported)")
+@click.option("--default", "is_default", is_flag=True, help="Set as default profile")
+@click.option("--extract-facts", is_flag=True, help="Extract knowledge facts from imported profile")
+@click.option("--config", "-c", "config_path", default=None, help="Config file path")
+def profile_import(
+    path: str, name: str, is_default: bool, extract_facts: bool, config_path: str | None
+) -> None:
+    """Import a profile from a JSON file.
+
+    \b
+    PATH  Path to the profile JSON file to import.
+
+    Use --extract-facts to distill the profile into knowledge facts
+    stored in ChromaDB for use in future question generation.
+    """
+    try:
+        from .db import get_session, init_db
+        from .services.profile_service import ProfileService
+
+        init_db()
+        session = next(get_session())
+        user_id = _get_user_id(config_path)
+        service = ProfileService()
+
+        result = service.import_profile(
+            file_path=path,
+            user_id=user_id,
+            session=session,
+            name=name,
+            is_default=is_default,
+        )
+
+        click.echo(click.style(f"✓ Imported profile '{result.name}' (ID: {result.id})", fg="green"))
+        if is_default:
+            click.echo(click.style("  Set as default profile", fg="green"))
+
+        if extract_facts:
+            try:
+                from .services.fact_extractor import FactExtractor
+                from .services.knowledge import KnowledgeService
+                from .services.llm_service import LLMService
+
+                config = load_config(config_path)
+                llm_service = LLMService(config)
+                extractor = FactExtractor(llm_service)
+
+                profile_dict = json.loads(result.profile_data)
+
+                provider_name = config.llm.provider
+                click.echo(f"  Extracting facts via {provider_name} (this may take a minute)...")
+
+                extraction = extractor.extract_facts_from_profile(profile_dict)
+
+                if extraction.facts:
+                    knowledge_svc = KnowledgeService(config, user_id=user_id)
+                    stored_ids = knowledge_svc.store_facts(
+                        extraction.facts,
+                        source="profile_import",
+                    )
+                    click.echo(
+                        click.style(
+                            f"  Extracted and stored {len(stored_ids)} facts from profile",
+                            fg="green",
+                        )
+                    )
+                else:
+                    click.echo("  No extractable facts found in profile")
+
+            except ImportError:
+                click.echo(
+                    click.style(
+                        "  Skipping fact extraction: knowledge deps not installed. "
+                        "Install with: pip install -e '.[knowledge,llm]'",
+                        fg="yellow",
+                    )
+                )
+            except Exception as e:
+                logger.error(f"Error extracting facts from profile: {e}")
+                click.echo(click.style(f"  Warning: fact extraction failed: {e}", fg="yellow"))
+
+    except FileNotFoundError as e:
+        raise click.ClickException(str(e))
+    except json.JSONDecodeError as e:
+        raise click.ClickException(f"Invalid JSON file: {e}")
+    except ImportError as e:
+        raise click.ClickException(
+            f"Missing dependency: {e}. Install with: pip install -e '.[auth]'"
+        )
+    except Exception as e:
+        logger.error(f"Error importing profile: {e}")
+        raise click.ClickException(f"Error importing profile: {e}")
+
+
+@profile.command("export")
+@click.option("--id", "profile_id", type=int, default=None, help="Profile ID (default: default)")
+@click.option("--output", "-o", default=None, help="Output file path (default: stdout)")
+@click.option("--config", "-c", "config_path", default=None, help="Config file path")
+def profile_export(profile_id: int | None, output: str | None, config_path: str | None) -> None:
+    """Export a profile as JSON.
+
+    Exports the default profile unless --id is specified.
+    """
+    try:
+        from .db import get_session, init_db
+        from .services.profile_service import ProfileService
+
+        init_db()
+        session = next(get_session())
+        user_id = _get_user_id(config_path)
+        service = ProfileService()
+
+        if profile_id is None:
+            default = service.get_default_profile(user_id=user_id, session=session)
+            if default is None:
+                raise click.ClickException(
+                    "No default profile found. Specify --id to export a specific profile."
+                )
+            profile_id = default.id
+
+        result = service.export_profile(profile_id=profile_id, user_id=user_id, session=session)
+
+        if result is None:
+            raise click.ClickException(f"Profile {profile_id} not found or not owned by you.")
+
+        json_output = json.dumps(result, indent=2, default=str)
+
+        if output:
+            Path(output).write_text(json_output)
+            click.echo(click.style(f"✓ Profile exported to {output}", fg="green"))
+        else:
+            click.echo(json_output)
+
+    except click.ClickException:
+        raise
+    except ImportError as e:
+        raise click.ClickException(
+            f"Missing dependency: {e}. Install with: pip install -e '.[auth]'"
+        )
+    except Exception as e:
+        logger.error(f"Error exporting profile: {e}")
+        raise click.ClickException(f"Error exporting profile: {e}")
+
+
+@profile.command("set-default")
+@click.argument("profile_id", type=int)
+@click.option("--config", "-c", "config_path", default=None, help="Config file path")
+def profile_set_default(profile_id: int, config_path: str | None) -> None:
+    """Set a profile as the default.
+
+    \b
+    PROFILE_ID  The ID of the profile to set as default.
+    """
+    try:
+        from .db import get_session, init_db
+        from .models.db_models import ProfileCreate
+        from .services.profile_service import ProfileService
+
+        init_db()
+        session = next(get_session())
+        user_id = _get_user_id(config_path)
+        service = ProfileService()
+
+        existing = service.get_profile(profile_id, user_id=user_id, session=session)
+        if existing is None:
+            raise click.ClickException(f"Profile {profile_id} not found or not owned by you.")
+
+        data = ProfileCreate(
+            name=existing.name,
+            profile_data=json.loads(existing.profile_data),
+            is_default=True,
+        )
+        updated = service.update_profile(
+            profile_id=profile_id, user_id=user_id, data=data, session=session
+        )
+
+        if updated is None:
+            raise click.ClickException(f"Failed to set profile {profile_id} as default.")
+
+        click.echo(
+            click.style(f"✓ Profile '{updated.name}' (ID: {updated.id}) set as default", fg="green")
+        )
+
+    except click.ClickException:
+        raise
+    except ImportError as e:
+        raise click.ClickException(
+            f"Missing dependency: {e}. Install with: pip install -e '.[auth]'"
+        )
+    except Exception as e:
+        logger.error(f"Error setting default profile: {e}")
+        raise click.ClickException(f"Error setting default profile: {e}")
+
+
+@profile.command("delete")
+@click.argument("profile_id", type=int)
+@click.option("--config", "-c", "config_path", default=None, help="Config file path")
+def profile_delete(profile_id: int, config_path: str | None) -> None:
+    """Delete a profile by ID.
+
+    \b
+    PROFILE_ID  The ID of the profile to delete.
+    """
+    try:
+        from .db import get_session, init_db
+        from .services.profile_service import ProfileService
+
+        init_db()
+        session = next(get_session())
+        user_id = _get_user_id(config_path)
+        service = ProfileService()
+
+        deleted = service.delete_profile(profile_id=profile_id, user_id=user_id, session=session)
+
+        if not deleted:
+            raise click.ClickException(f"Profile {profile_id} not found or not owned by you.")
+
+        click.echo(click.style(f"✓ Profile {profile_id} deleted", fg="green"))
+
+    except click.ClickException:
+        raise
+    except ImportError as e:
+        raise click.ClickException(
+            f"Missing dependency: {e}. Install with: pip install -e '.[auth]'"
+        )
+    except Exception as e:
+        logger.error(f"Error deleting profile: {e}")
+        raise click.ClickException(f"Error deleting profile: {e}")
+
+
+# ── Knowledge command group ──────────────────────────────────────────────────
+
+
+@main.group()
+def knowledge():
+    """Knowledge management commands (search, list, delete)."""
+    pass
+
+
+@knowledge.command("search")
+@click.argument("query")
+@click.option("-n", "--num-results", default=5, type=int, help="Number of results (default: 5)")
+@click.option("--category", default=None, help="Filter by category (skill, experience, etc.)")
+@click.option("--config", "-c", "config_path", default=None, help="Config file path")
+def knowledge_search(
+    query: str, num_results: int, category: str | None, config_path: str | None
+) -> None:
+    """Search knowledge facts by query.
+
+    \b
+    QUERY  Natural language search string.
+
+    \b
+    Examples:
+      fast-app knowledge search "python experience"
+      fast-app knowledge search "leadership" --category experience
+      fast-app knowledge search "distributed systems" -n 10
+    """
+    try:
+        from .services.knowledge import KnowledgeService
+
+        config = load_config(config_path)
+        user_id = _get_user_id(config_path)
+        service = KnowledgeService(config, user_id=user_id)
+
+        results = service.query_facts(query=query, n=num_results, category=category)
+
+        if not results:
+            click.echo("No matching facts found.")
+            return
+
+        click.echo(f"\n🔍 Search results for '{query}':\n")
+        for i, result in enumerate(results, 1):
+            distance_str = f" (distance: {result.distance:.4f})" if result.distance else ""
+            click.echo(f"  {i}. [{result.category}] {result.content}{distance_str}")
+            click.echo(f"     ID: {result.id}")
+            if result.source:
+                click.echo(f"     Source: {result.source}")
+            if result.confidence:
+                click.echo(f"     Confidence: {result.confidence:.2f}")
+            click.echo()
+
+    except ImportError as e:
+        raise click.ClickException(
+            f"Missing dependency: {e}. Install with: pip install -e '.[knowledge]'"
+        )
+    except Exception as e:
+        logger.error(f"Error searching knowledge: {e}")
+        raise click.ClickException(f"Error searching knowledge: {e}")
+
+
+@knowledge.command("list")
+@click.option("--category", default=None, help="Filter by category (skill, experience, etc.)")
+@click.option("--limit", default=100, type=int, help="Maximum number of facts to list")
+@click.option("--config", "-c", "config_path", default=None, help="Config file path")
+def knowledge_list(category: str | None, limit: int, config_path: str | None) -> None:
+    """List stored knowledge facts, optionally filtered by category."""
+    try:
+        from .services.knowledge import KnowledgeService
+
+        config = load_config(config_path)
+        user_id = _get_user_id(config_path)
+        service = KnowledgeService(config, user_id=user_id)
+
+        facts = service.list_facts(limit=limit, category=category)
+
+        if not facts:
+            category_msg = f" in category '{category}'" if category else ""
+            click.echo(f"No knowledge facts found{category_msg}.")
+            return
+
+        category_msg = f" in category '{category}'" if category else ""
+        click.echo(f"\n📚 Knowledge facts{category_msg} ({len(facts)} total):\n")
+
+        for i, fact in enumerate(facts, 1):
+            click.echo(f"  {i}. [{fact.category}] {fact.content}")
+            click.echo(f"     ID: {fact.id}")
+            if fact.source:
+                click.echo(f"     Source: {fact.source}")
+            if fact.confidence:
+                click.echo(f"     Confidence: {fact.confidence:.2f}")
+            click.echo()
+
+    except ImportError as e:
+        raise click.ClickException(
+            f"Missing dependency: {e}. Install with: pip install -e '.[knowledge]'"
+        )
+    except Exception as e:
+        logger.error(f"Error listing knowledge: {e}")
+        raise click.ClickException(f"Error listing knowledge: {e}")
+
+
+@knowledge.command("delete")
+@click.argument("ids")
+@click.option("--config", "-c", "config_path", default=None, help="Config file path")
+def knowledge_delete(ids: str, config_path: str | None) -> None:
+    """Delete knowledge facts by comma-separated IDs.
+
+    Use the ID shown by 'fast-app knowledge list' (UUID).
+
+    \b
+    IDS  Comma-separated list of fact IDs to delete.
+
+    \b
+    Examples:
+      fast-app knowledge delete a1b2c3d4-e5f6-7890-abcd-ef1234567890
+      fast-app knowledge delete id1,id2,id3
+    """
+    try:
+        from .services.knowledge import KnowledgeService
+
+        config = load_config(config_path)
+        user_id = _get_user_id(config_path)
+        service = KnowledgeService(config, user_id=user_id)
+
+        fact_ids = [id.strip() for id in ids.split(",") if id.strip()]
+
+        if not fact_ids:
+            raise click.ClickException("No IDs provided. Use comma-separated IDs.")
+
+        success = service.delete_facts(fact_ids)
+
+        if success:
+            click.echo(click.style(f"✓ Deleted {len(fact_ids)} fact(s)", fg="green"))
+        else:
+            raise click.ClickException("Failed to delete facts. ChromaDB may be unavailable.")
+
+    except click.ClickException:
+        raise
+    except ImportError as e:
+        raise click.ClickException(
+            f"Missing dependency: {e}. Install with: pip install -e '.[knowledge]'"
+        )
+    except Exception as e:
+        logger.error(f"Error deleting knowledge: {e}")
+        raise click.ClickException(f"Error deleting knowledge: {e}")
 
 
 if __name__ == "__main__":

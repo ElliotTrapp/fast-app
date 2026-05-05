@@ -4,21 +4,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Fast App - Resume Generator</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=2">
 </head>
 <body>
     <div class="container">
         <!-- Header -->
         <header>
             <h1>🚀 Fast App</h1>
-            <p class="subtitle">Generate tailored resumes from job URLs</p>
+            <p class="subtitle">Generate tailored resumes from job postings</p>
         </header>
 
         <!-- Job Submission Form -->
         <div id="submission-form">
             <div class="form-group">
-                <label for="job-url">Job URL</label>
-                <input type="url" id="job-url" placeholder="https://example.com/job/123" required>
+                <label for="job-url">Job URL <span class="optional-label">(optional if pasting description)</span></label>
+                <input type="url" id="job-url" placeholder="https://example.com/job/123">
+            </div>
+
+            <div class="or-divider">— or paste the description —</div>
+
+            <div class="form-group">
+                <label for="job-description">Job Description <span class="optional-label">(optional if using URL)</span></label>
+                <textarea id="job-description" placeholder="Paste the full job description here..." rows="8"></textarea>
             </div>
 
             <div id="flags">
@@ -45,7 +52,7 @@
             </div>
 
             <div class="buttons">
-                <button id="submit-btn" class="btn-primary">Generate Resume</button>
+                <button id="submit-btn" class="btn-primary" type="button" disabled>Generate Resume</button>
             </div>
         </div>
 
@@ -110,6 +117,6 @@
         </div>
     </div>
 
-    <script src="/static/app.js"></script>
+    <script src="/static/app.js?v=2"></script>
 </body>
 </html>

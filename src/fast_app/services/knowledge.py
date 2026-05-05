@@ -252,8 +252,10 @@ class KnowledgeService:
         for i, doc in enumerate(results["documents"][0]):
             metadata = results["metadatas"][0][i]
             distance = results["distances"][0][i] if "distances" in results else None
+            fact_id = results["ids"][0][i] if "ids" in results else ""
             search_results.append(
                 KnowledgeSearchResult(
+                    id=fact_id,
                     content=doc,
                     category=metadata.get("category", ""),
                     confidence=metadata.get("confidence", 0.0),
@@ -298,8 +300,10 @@ class KnowledgeService:
         facts = []
         for i, doc in enumerate(results["documents"]):
             metadata = results["metadatas"][i]
+            fact_id = results["ids"][i] if "ids" in results else ""
             facts.append(
                 KnowledgeSearchResult(
+                    id=fact_id,
                     content=doc,
                     category=metadata.get("category", ""),
                     confidence=metadata.get("confidence", 0.0),

@@ -22,14 +22,23 @@ from ..utils import (
 from .state import JobState
 
 
-async def process_job(url: str, flags: dict[str, bool], state, broadcast_callback) -> None:
+async def process_job(
+    url: str,
+    flags: dict[str, bool],
+    state,
+    broadcast_callback,
+    title: str | None = None,
+    content: str | None = None,
+) -> None:
     """Process a job asynchronously in the background.
 
     Args:
-        url: Job URL
+        url: Job URL (empty string in text mode)
         flags: CLI flags (force, debug, etc.)
         state: StateManager instance
         broadcast_callback: Async function to broadcast updates
+        title: Job title for text input mode
+        content: Job description text for text input mode
     """
     try:
         # Load configuration
@@ -45,8 +54,14 @@ async def process_job(url: str, flags: dict[str, bool], state, broadcast_callbac
         base_resume = load_base_resume(None)
         base_cover_letter = load_base_cover_letter(None)
 
+        # Determine text vs URL mode
+        text_mode = bool(title and content)
+
         # Update state
-        job_id = generate_job_id(url)
+        if text_mode:
+            job_id = generate_job_id(content)
+        else:
+            job_id = generate_job_id(url)
         state.start_job(job_id, url, flags)
         await broadcast_callback(
             {"type": "state_change", "old_state": "idle", "new_state": "processing"}
@@ -54,10 +69,19 @@ async def process_job(url: str, flags: dict[str, bool], state, broadcast_callbac
 
         # Extract job data
         state.update_progress("Extracting job data", 0.1)
-        logger.info(f"Extracting job from: {url}")
-
         job_extractor = JobExtractor(ollama.client, config.ollama.model)
-        job_data = await asyncio.to_thread(job_extractor.extract_from_url, url)
+
+        if text_mode:
+            logger.info(f"Extracting job from text: {title}")
+            job_data = await asyncio.to_thread(
+                job_extractor.extract_from_text, title, content, url=url
+            )
+        else:
+            logger.info(f"Extracting job from: {url}")
+            # Call async method directly — avoids _run_async deadlock when
+            # called from within asyncio.to_thread (the sync wrapper creates
+            # a nested event loop that conflicts with the webapp's loop)
+            job_data = await job_extractor._extract_from_url_async(url)
 
         raw_title = job_data.get("title", "Unknown")
         raw_company = job_data.get("company", "Unknown")
@@ -71,10 +95,10 @@ async def process_job(url: str, flags: dict[str, bool], state, broadcast_callbac
 
         logger.success(f"Found: {job_title} at {company}")
 
-        # Check for cached job
+        # Check for cached job (URL mode only)
         job_dir = cache.get_job_dir(company, job_title, job_id, create=True)
 
-        if not flags.get("force") and state.job_id:
+        if not text_mode and not flags.get("force") and state.job_id:
             existing_dir = cache.has_cached_job(url)
             if existing_dir:
                 cached_job = cache.get_cached_job(existing_dir)
@@ -102,7 +126,30 @@ async def process_job(url: str, flags: dict[str, bool], state, broadcast_callbac
             state.update_progress("Generating questions", 0.25)
             logger.info("Generating questions...")
 
-            questions = await asyncio.to_thread(ollama.generate_questions, job_data, profile)
+            knowledge_facts = None
+            if not flags.get("no_knowledge"):
+                try:
+                    from ..services.knowledge import KnowledgeService
+
+                    knowledge_svc = KnowledgeService(config, user_id=1)
+                    results = knowledge_svc.query_facts(
+                        f"{job_data.get('title', '')} {job_data.get('description', '')[:200]}",
+                        n=5,
+                    )
+                    if results:
+                        knowledge_facts = [r.content for r in results]
+                        logger.info(f"Injected {len(results)} facts from knowledge base")
+                except ImportError:
+                    pass
+                except Exception:
+                    pass
+
+            questions = await asyncio.to_thread(
+                ollama.generate_questions,
+                job_data,
+                profile,
+                knowledge_context=knowledge_facts,
+            )
 
             if questions:
                 cache.save_questions(job_dir, questions)
@@ -127,6 +174,29 @@ async def process_job(url: str, flags: dict[str, bool], state, broadcast_callbac
                 # Save answers
                 cache.save_answers(job_dir, answers)
                 logger.success(f"Saved {len(answers)} answers")
+
+                # Extract and store facts from Q&A (if knowledge enabled)
+                if not flags.get("no_knowledge") and questions and answers:
+                    try:
+                        from ..services.fact_extractor import FactExtractor
+                        from ..services.knowledge import KnowledgeService
+                        from ..services.llm_service import LLMService
+
+                        llm_service = LLMService(config)
+                        fact_extractor = FactExtractor(llm_service)
+                        result = fact_extractor.extract_facts_from_answers(
+                            questions, answers, profile_data=profile, job_data=job_data
+                        )
+                        if result.facts:
+                            knowledge_svc = KnowledgeService(config, user_id=1)
+                            stored_ids = knowledge_svc.store_facts(result.facts, job_url=url)
+                            logger.success(f"Stored {len(stored_ids)} facts in knowledge base")
+                    except ImportError:
+                        logger.warning(
+                            "Knowledge dependencies not installed, skipping fact extraction"
+                        )
+                    except Exception as e:
+                        logger.warning(f"Fact extraction failed: {e}")
 
                 # Transition back to processing
                 await broadcast_callback(

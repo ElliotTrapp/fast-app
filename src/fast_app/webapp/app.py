@@ -12,7 +12,9 @@ from fastapi.staticfiles import StaticFiles
 from ..db import init_db
 from .auth_routes import router as auth_router
 from .background_tasks import process_job
+from .knowledge_routes import router as knowledge_router
 from .log_stream import log_broadcaster
+from .profile_routes import router as profile_router
 from .state import state_manager
 
 current_task: asyncio.Task | None = None
@@ -45,6 +47,8 @@ app = FastAPI(
 )
 
 app.include_router(auth_router)
+app.include_router(profile_router)
+app.include_router(knowledge_router)
 
 # Mount static files
 static_dir = Path(__file__).parent.parent / "static"
@@ -114,12 +118,21 @@ async def get_status():
 
 @app.post("/api/submit")
 async def submit_job(request: dict[str, Any]):
-    """Start processing a new job."""
+    """Start processing a new job.
+
+    Accepts either a URL or text input:
+    - URL mode: {"url": "https://..."}
+    - Text mode: {"title": "Job Title", "content": "Job description text..."}
+    """
     global current_task
 
-    url = request.get("url")
-    if not url:
-        return {"error": "URL is required"}, 400
+    url = request.get("url", "")
+    title = request.get("title")
+    content = request.get("content")
+    job_url = request.get("job_url", "")
+
+    if not url and not (title and content):
+        return {"error": "Either 'url' or both 'title' and 'content' are required"}, 400
 
     # Check if already processing
     if state_manager.is_active():
@@ -132,11 +145,20 @@ async def submit_job(request: dict[str, Any]):
         "overwrite_resume": request.get("flags", {}).get("overwrite_resume", False),
         "skip_questions": request.get("flags", {}).get("skip_questions", False),
         "skip_cover_letter": request.get("flags", {}).get("skip_cover_letter", False),
+        "no_knowledge": request.get("flags", {}).get("no_knowledge", False),
+        "review_facts": request.get("flags", {}).get("review_facts", False),
     }
 
     # Start background processing
     async def run_job():
-        await process_job(url, flags, state_manager, log_broadcaster.broadcast)
+        await process_job(
+            url or job_url,
+            flags,
+            state_manager,
+            log_broadcaster.broadcast,
+            title=title,
+            content=content,
+        )
 
     current_task = asyncio.create_task(run_job())
 
