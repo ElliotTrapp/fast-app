@@ -283,13 +283,17 @@ class OllamaService:
 
     @with_retry(max_retries=3, initial_delay=2.0)
     def generate_questions(
-        self, job_data: dict[str, any], profile_data: dict[str, any]
+        self,
+        job_data: dict[str, any],
+        profile_data: dict[str, any],
+        knowledge_context: list[str] | None = None,
     ) -> list[str]:
         """Generate clarifying questions for resume tailoring.
 
         Args:
             job_data: Extracted job data
             profile_data: User profile data
+            knowledge_context: Optional list of fact strings from knowledge base
 
         Returns:
             List of question strings
@@ -316,7 +320,9 @@ class OllamaService:
         try:
             try:
                 if self._llm_service is not None:
-                    result = self._llm_service.generate_questions(job_data, profile_data)
+                    result = self._llm_service.generate_questions(
+                        job_data, profile_data, knowledge_context=knowledge_context
+                    )
                     return result
             except Exception:
                 pass

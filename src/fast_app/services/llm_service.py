@@ -208,7 +208,11 @@ class LLMService:
         return result
 
     def generate_questions(
-        self, job_data: dict[str, Any], profile_data: dict[str, Any], **kwargs
+        self,
+        job_data: dict[str, Any],
+        profile_data: dict[str, Any],
+        knowledge_context: list[str] | None = None,
+        **kwargs,
     ) -> list[str]:
         """Generate interview questions using a LangChain chain.
 
@@ -219,31 +223,40 @@ class LLMService:
         Args:
             job_data: Extracted job data (title, company, description, etc.).
             profile_data: User profile data (skills, experience, etc.).
+            knowledge_context: Optional list of fact strings from the knowledge
+                base. When provided, questions focus on gaps between job
+                requirements and known information.
             **kwargs: Additional arguments passed to the LLM.
 
         Returns:
             List of question strings.
-
-        Note:
-            The knowledge_context parameter is added in Phase 4 to enable
-            knowledge-informed question generation.
         """
         from ..models import QuestionContent
-        from ..prompts.templates import get_questions_template
+        from ..prompts.templates import (
+            get_questions_knowledge_section,
+            get_questions_template,
+        )
 
         template = get_questions_template()
         chain = template | self._llm | self._structured_output(QuestionContent)
+
+        knowledge_section = get_questions_knowledge_section(knowledge_context)
 
         logger.llm_call(
             "generate_questions",
             {
                 "job_title": job_data.get("title", "Unknown"),
                 "company": job_data.get("company", "Unknown"),
+                "knowledge_facts": len(knowledge_context) if knowledge_context else 0,
             },
         )
 
         result = chain.invoke(
-            {"job_data": job_data, "profile_data": profile_data},
+            {
+                "job_data": job_data,
+                "profile_data": profile_data,
+                "knowledge_section": knowledge_section,
+            },
             **kwargs,
         )
 
