@@ -1,4 +1,3 @@
-const ws = null;
 let statusCheckInterval = null;
 let currentJobId = null;
 
