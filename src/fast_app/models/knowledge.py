@@ -112,6 +112,7 @@ class KnowledgeSearchResult(BaseModel):
     """A fact retrieved from the knowledge base via semantic search.
 
     Attributes:
+        id: ChromaDB document ID (UUID string) — use for deletion
         content: The fact content
         category: Category for filtering
         confidence: Extraction confidence score
@@ -120,6 +121,7 @@ class KnowledgeSearchResult(BaseModel):
         metadata: Full ChromaDB metadata dictionary
     """
 
+    id: str = Field(default="", description="ChromaDB document ID (use for deletion)")
     content: str = Field(..., description="The fact content")
     category: str = Field(default="", description="Category (skill, experience, etc.)")
     confidence: float = Field(default=0.0, description="Extraction confidence (0.0-1.0)")

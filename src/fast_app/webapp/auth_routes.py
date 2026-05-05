@@ -30,9 +30,9 @@ See: docs/adr/007-cli-first-architecture.md, docs/guide/auth-setup.md
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlmodel import Session, select
+from sqlmodel import select
 
-from ..db import get_session
+from ..db import SessionDep
 from ..models.db_models import User, UserCreate, UserRead
 from ..services.auth import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
@@ -48,7 +48,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 @router.post("/signup", response_model=dict)
 async def signup(
     request: UserCreate,
-    session: Session = Depends(get_session),
+    session: SessionDep,
 ) -> dict:
     """Create a new user account.
 
@@ -89,8 +89,8 @@ async def signup(
 @router.post("/login", response_model=dict)
 async def login(
     request: UserCreate,
-    session: Session = Depends(get_session),
-    response: Response = None,
+    session: SessionDep,
+    response: Response,
 ) -> dict:
     """Authenticate an existing user.
 

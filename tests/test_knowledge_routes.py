@@ -127,20 +127,20 @@ class TestDeleteFacts:
     """Tests for DELETE /api/knowledge/facts."""
 
     def test_delete_with_empty_ids_raises_error(self, client):
-        """Delete endpoint raises error when ids list is empty."""
-        with pytest.raises(ValueError, match="non-empty list"):
-            client.request(
-                "DELETE",
-                "/api/knowledge/facts",
-                json={"request": {"ids": []}},
-            )
+        """Delete endpoint returns 422 when ids list is empty."""
+        response = client.request(
+            "DELETE",
+            "/api/knowledge/facts",
+            json={"ids": []},
+        )
+        assert response.status_code == 422
 
     def test_delete_with_valid_ids_returns_200_or_500(self, client):
         """Delete endpoint returns 200 or 500 depending on ChromaDB availability."""
         response = client.request(
             "DELETE",
             "/api/knowledge/facts",
-            json={"request": {"ids": ["nonexistent-id-123"]}},
+            json={"ids": ["nonexistent-id-123"]},
         )
         # 200 if ChromaDB available, 500 if unavailable
         assert response.status_code in (200, 500)
@@ -155,6 +155,6 @@ class TestDeleteFacts:
         response = client.request(
             "DELETE",
             "/api/knowledge/facts",
-            json={"request": {"wrong_field": ["id1"]}},
+            json={"wrong_field": ["id1"]},
         )
         assert response.status_code == 422

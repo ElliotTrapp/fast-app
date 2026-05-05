@@ -27,9 +27,8 @@ See: docs/adr/007-cli-first-architecture.md, docs/guide/profiles.md
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlmodel import Session
 
-from ..db import get_session
+from ..db import SessionDep
 from ..models.db_models import ProfileCreate, ProfileRead, User, UserProfile
 from ..services.auth import get_current_user
 from ..services.profile_service import ProfileService
@@ -85,8 +84,8 @@ def _to_profile_read(profile: UserProfile) -> ProfileRead:
 
 @router.get("", response_model=list[ProfileRead])
 async def list_profiles(
+    session: SessionDep,
     user: User | None = Depends(get_current_user),
-    session: Session = Depends(get_session),
 ):
     """List all profiles for the current user.
 
@@ -107,8 +106,8 @@ async def list_profiles(
 @router.post("", response_model=ProfileRead, status_code=status.HTTP_201_CREATED)
 async def create_profile(
     data: ProfileCreate,
+    session: SessionDep,
     user: User | None = Depends(get_current_user),
-    session: Session = Depends(get_session),
 ):
     """Create a new profile.
 
@@ -129,8 +128,8 @@ async def create_profile(
 
 @router.get("/default", response_model=ProfileRead)
 async def get_default_profile(
+    session: SessionDep,
     user: User | None = Depends(get_current_user),
-    session: Session = Depends(get_session),
 ):
     """Get the default profile for the current user.
 
@@ -157,8 +156,8 @@ async def get_default_profile(
 @router.post("/import", response_model=ProfileRead, status_code=status.HTTP_201_CREATED)
 async def import_profile(
     data: ProfileCreate,
+    session: SessionDep,
     user: User | None = Depends(get_current_user),
-    session: Session = Depends(get_session),
 ):
     """Import a profile from JSON data.
 
@@ -181,8 +180,8 @@ async def import_profile(
 @router.get("/{profile_id}", response_model=ProfileRead)
 async def get_profile(
     profile_id: int,
+    session: SessionDep,
     user: User | None = Depends(get_current_user),
-    session: Session = Depends(get_session),
 ):
     """Get a specific profile by ID (owner check enforced).
 
@@ -211,8 +210,8 @@ async def get_profile(
 async def update_profile(
     profile_id: int,
     data: ProfileCreate,
+    session: SessionDep,
     user: User | None = Depends(get_current_user),
-    session: Session = Depends(get_session),
 ):
     """Update a profile (owner check enforced).
 
@@ -241,8 +240,8 @@ async def update_profile(
 @router.delete("/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_profile(
     profile_id: int,
+    session: SessionDep,
     user: User | None = Depends(get_current_user),
-    session: Session = Depends(get_session),
 ):
     """Delete a profile (owner check enforced).
 
@@ -270,8 +269,8 @@ async def delete_profile(
 @router.get("/{profile_id}/export")
 async def export_profile(
     profile_id: int,
+    session: SessionDep,
     user: User | None = Depends(get_current_user),
-    session: Session = Depends(get_session),
 ):
     """Export a profile as a JSON dict.
 

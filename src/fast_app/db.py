@@ -38,7 +38,9 @@ See: docs/adr/003-sqlmodel-sqlite-auth.md
 import os
 from collections.abc import Generator
 from pathlib import Path
+from typing import Annotated
 
+from fastapi import Depends
 from sqlmodel import Session, SQLModel, create_engine
 
 from .config import Config
@@ -108,13 +110,10 @@ def init_db(config: Config | None = None) -> None:
 
 
 def get_session(config: Config | None = None) -> Generator[Session, None, None]:
-    """FastAPI dependency that yields a database session.
+    """Get a database session, optionally using a specific config.
 
-    Usage in FastAPI routes:
-        @router.get("/me")
-        async def get_me(user: User = Depends(get_current_user),
-                         session: Session = Depends(get_session)):
-            ...
+    Can be called directly with a config, or used as a FastAPI dependency
+    via SessionDep (which uses the default config).
 
     Args:
         config: Application config for database path. If None, uses defaults.
@@ -127,7 +126,32 @@ def get_session(config: Config | None = None) -> Generator[Session, None, None]:
         yield session
 
 
+def _session_dep() -> Generator[Session, None, None]:
+    """FastAPI-only dependency that yields a database session.
+
+    Separated from get_session to avoid FastAPI scanning Config in the
+    function signature and treating it as a request body field.
+    """
+    engine = get_engine()
+    with Session(engine) as session:
+        yield session
+
+
 def reset_engine() -> None:
     """Reset the module-level engine. Useful for testing."""
     global _engine
     _engine = None
+
+
+# FastAPI dependency type alias for database sessions.
+# Use this in route signatures instead of `Session = Depends(get_session)`
+# to avoid FastAPI scanning get_session's `config: Config | None` parameter
+# and incorrectly treating it as a body field (which forces body embedding).
+#
+# Usage:
+#     from fast_app.db import SessionDep
+#
+#     @router.post("/items")
+#     async def create_item(data: ItemCreate, session: SessionDep):
+#         ...
+SessionDep = Annotated[Session, Depends(_session_dep)]

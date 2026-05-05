@@ -29,10 +29,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
-from sqlmodel import Session
 
 from ..config import load_config
-from ..db import get_session
+from ..db import SessionDep
 from ..models.db_models import User
 from ..models.knowledge import KnowledgeSearchResult
 from ..services.auth import get_current_user
@@ -77,16 +76,16 @@ def _get_service(user_id: int) -> KnowledgeService:
 class DeleteFactsRequest(BaseModel):
     """Request body for deleting facts by ID."""
 
-    ids: list[str] = Field(..., description="List of fact IDs to delete")
+    ids: list[str] = Field(..., min_length=1, description="List of fact IDs to delete")
 
 
 @router.get("/search", response_model=list[KnowledgeSearchResult])
 async def search_facts(
     query: str,
+    session: SessionDep,
+    user: User | None = Depends(get_current_user),
     n: int = 5,
     category: str | None = None,
-    user: User | None = Depends(get_current_user),
-    session: Session = Depends(get_session),
 ):
     """Search for facts semantically related to a query.
 
@@ -108,10 +107,10 @@ async def search_facts(
 
 @router.get("/facts", response_model=list[KnowledgeSearchResult])
 async def list_facts(
+    session: SessionDep,
+    user: User | None = Depends(get_current_user),
     limit: int = 100,
     category: str | None = None,
-    user: User | None = Depends(get_current_user),
-    session: Session = Depends(get_session),
 ):
     """List all facts in the user's knowledge collection.
 
@@ -133,8 +132,8 @@ async def list_facts(
 @router.delete("/facts")
 async def delete_facts(
     request: DeleteFactsRequest,
+    session: SessionDep,
     user: User | None = Depends(get_current_user),
-    session: Session = Depends(get_session),
 ):
     """Delete specific facts by their IDs.
 

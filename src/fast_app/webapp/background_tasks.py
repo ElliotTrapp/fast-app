@@ -78,7 +78,10 @@ async def process_job(
             )
         else:
             logger.info(f"Extracting job from: {url}")
-            job_data = await asyncio.to_thread(job_extractor.extract_from_url, url)
+            # Call async method directly — avoids _run_async deadlock when
+            # called from within asyncio.to_thread (the sync wrapper creates
+            # a nested event loop that conflicts with the webapp's loop)
+            job_data = await job_extractor._extract_from_url_async(url)
 
         raw_title = job_data.get("title", "Unknown")
         raw_company = job_data.get("company", "Unknown")

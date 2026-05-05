@@ -114,6 +114,44 @@ class FactExtractor:
 
         return result
 
+    def extract_facts_from_profile(
+        self,
+        profile_data: dict[str, Any],
+    ) -> FactExtractionResult:
+        """Extract atomic facts from imported profile data.
+
+        Takes a profile dict (e.g., from profile.json import) and distills
+        it into discrete facts suitable for embedding and storage in the
+        knowledge base.
+
+        Args:
+            profile_data: User profile dictionary containing skills,
+                experience, education, etc.
+
+        Returns:
+            FactExtractionResult containing extracted facts and a summary.
+        """
+        logger.llm_call(
+            "extract_facts_from_profile",
+            {"profile_keys": list(profile_data.keys()) if profile_data else []},
+        )
+
+        from ..prompts.fact_extraction import get_profile_fact_extraction_prompt
+
+        result = self.llm_service.generate_with_schema(
+            prompt=get_profile_fact_extraction_prompt(
+                profile_data=json.dumps(profile_data),
+            ),
+            schema=FactExtractionResult,
+        )
+
+        logger.llm_result(
+            "fact_extraction_from_profile",
+            {"fact_count": len(result.facts)},
+        )
+
+        return result
+
     def _build_prompt(
         self,
         qa_pairs: str,

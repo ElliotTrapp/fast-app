@@ -18,9 +18,10 @@ sqlmodel = pytest.importorskip(  # noqa: E402
 
 from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
+from sqlalchemy.pool import StaticPool  # noqa: E402
 from sqlmodel import Session, SQLModel, create_engine  # noqa: E402
 
-from fast_app.db import get_session  # noqa: E402
+from fast_app.db import _session_dep, get_session  # noqa: E402
 from fast_app.models.db_models import User  # noqa: E402
 from fast_app.services.auth import get_current_user, hash_password  # noqa: E402
 from fast_app.webapp.profile_routes import router as profile_router  # noqa: E402
@@ -41,6 +42,7 @@ def engine():
     eng = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
     )
     SQLModel.metadata.create_all(eng)
     yield eng
@@ -67,8 +69,6 @@ def test_user(session):
 @pytest.fixture
 def app_client(engine, session, test_user):
     """Create a test app with DB session and auth overrides."""
-    from fast_app.config import Config
-
     test_app = FastAPI()
     test_app.include_router(profile_router)
 
@@ -79,8 +79,8 @@ def app_client(engine, session, test_user):
         return test_user
 
     test_app.dependency_overrides[get_session] = get_session_override
+    test_app.dependency_overrides[_session_dep] = get_session_override
     test_app.dependency_overrides[get_current_user] = get_current_user_override
-    test_app.dependency_overrides[Config] = lambda: None
 
     with TestClient(test_app) as client:
         yield client
@@ -89,10 +89,13 @@ def app_client(engine, session, test_user):
 
 
 @pytest.fixture
-def disabled_app_client(engine, session):
-    """Create a test app with auth disabled (get_current_user returns None)."""
-    from fast_app.config import Config
+def disabled_app_client(engine, session, test_user):
+    """Create a test app with auth disabled (get_current_user returns None).
 
+    Uses test_user fixture to ensure a user row exists in the DB.
+    When auth is disabled, routes use _DEFAULT_USER_ID=1, which must
+    reference a valid user row due to the UserProfile.user_id FK.
+    """
     test_app = FastAPI()
     test_app.include_router(profile_router)
 
@@ -103,8 +106,8 @@ def disabled_app_client(engine, session):
         return None
 
     test_app.dependency_overrides[get_session] = get_session_override
+    test_app.dependency_overrides[_session_dep] = get_session_override
     test_app.dependency_overrides[get_current_user] = get_current_user_disabled
-    test_app.dependency_overrides[Config] = lambda: None
 
     with TestClient(test_app) as client:
         yield client
