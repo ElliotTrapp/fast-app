@@ -27,16 +27,50 @@ class OutputConfig:
 
 
 @dataclass
+class DatabaseConfig:
+    path: str = ""
+    jwt_secret: str = ""
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 1440
+
+
+@dataclass
+class LLMConfig:
+    provider: str = "ollama"
+    model: str = ""
+    temperature: float = 0.3
+    base_url: str = ""
+    api_key: str = ""
+
+
+@dataclass
+class ChromaConfig:
+    path: str = ""
+    embedding_model: str = "nomic-embed-text"
+    client_type: str = "persistent"
+    host: str = "localhost"
+    port: int = 8000
+
+
+@dataclass
 class Config:
     ollama: OllamaConfig = field(default_factory=OllamaConfig)
     resume: ReactiveResumeConfig = field(default_factory=ReactiveResumeConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
+    database: DatabaseConfig = field(default_factory=DatabaseConfig)
+    llm: LLMConfig = field(default_factory=LLMConfig)
+    chroma: ChromaConfig = field(default_factory=ChromaConfig)
 
     @classmethod
     def from_dict(cls, data: dict) -> "Config":
         ollama_data = data.get("ollama", {})
         resume_data = data.get("resume", {})
         output_data = data.get("output", {})
+        database_data = data.get("database", {})
+        llm_data = data.get("llm", {})
+        chroma_data = data.get("chroma", {})
+
+        llm_model = llm_data.get("model", "")
 
         return cls(
             ollama=OllamaConfig(
@@ -52,6 +86,26 @@ class Config:
             ),
             output=OutputConfig(
                 directory=output_data.get("directory", "generated"),
+            ),
+            database=DatabaseConfig(
+                path=database_data.get("path", ""),
+                jwt_secret=database_data.get("jwt_secret", ""),
+                jwt_algorithm=database_data.get("jwt_algorithm", "HS256"),
+                jwt_expire_minutes=database_data.get("jwt_expire_minutes", 1440),
+            ),
+            llm=LLMConfig(
+                provider=llm_data.get("provider", "ollama"),
+                model=llm_model,
+                temperature=llm_data.get("temperature", 0.3),
+                base_url=llm_data.get("base_url", ""),
+                api_key=llm_data.get("api_key", ""),
+            ),
+            chroma=ChromaConfig(
+                path=chroma_data.get("path", ""),
+                embedding_model=chroma_data.get("embedding_model", "nomic-embed-text"),
+                client_type=chroma_data.get("client_type", "persistent"),
+                host=chroma_data.get("host", "localhost"),
+                port=chroma_data.get("port", 8000),
             ),
         )
 
@@ -76,6 +130,26 @@ class Config:
             config.resume.endpoint = os.environ["RESUME_ENDPOINT"]
         if os.environ.get("RESUME_API_KEY"):
             config.resume.api_key = os.environ["RESUME_API_KEY"]
+        if os.environ.get("FAST_APP_DB_PATH"):
+            config.database.path = os.environ["FAST_APP_DB_PATH"]
+        if os.environ.get("FAST_APP_JWT_SECRET"):
+            config.database.jwt_secret = os.environ["FAST_APP_JWT_SECRET"]
+        if os.environ.get("FAST_APP_JWT_EXPIRE_MINUTES"):
+            config.database.jwt_expire_minutes = int(os.environ["FAST_APP_JWT_EXPIRE_MINUTES"])
+        if os.environ.get("FAST_APP_LLM_PROVIDER"):
+            config.llm.provider = os.environ["FAST_APP_LLM_PROVIDER"]
+        if os.environ.get("FAST_APP_LLM_MODEL"):
+            config.llm.model = os.environ["FAST_APP_LLM_MODEL"]
+        if os.environ.get("FAST_APP_LLM_BASE_URL"):
+            config.llm.base_url = os.environ["FAST_APP_LLM_BASE_URL"]
+        if os.environ.get("FAST_APP_LLM_API_KEY"):
+            config.llm.api_key = os.environ["FAST_APP_LLM_API_KEY"]
+        if os.environ.get("FAST_APP_CHROMA_PATH"):
+            config.chroma.path = os.environ["FAST_APP_CHROMA_PATH"]
+        if os.environ.get("FAST_APP_CHROMA_EMBEDDING_MODEL"):
+            config.chroma.embedding_model = os.environ["FAST_APP_CHROMA_EMBEDDING_MODEL"]
+        if os.environ.get("FAST_APP_CHROMA_CLIENT_TYPE"):
+            config.chroma.client_type = os.environ["FAST_APP_CHROMA_CLIENT_TYPE"]
 
         return config
 
