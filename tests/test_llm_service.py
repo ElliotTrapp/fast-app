@@ -10,15 +10,26 @@ import pytest
 from fast_app.config import Config, LLMConfig, OllamaConfig
 
 
-class TestLLMServiceCreation:
-    @pytest.fixture(autouse=True)
-    def check_deps(self):
-        try:
-            import fast_app.services.llm_service  # noqa: F401
-        except ImportError:
-            pytest.skip("langchain packages not installed")
+def _skip_if_no_langchain_ollama():
+    """Skip test if langchain-ollama is not installed."""
+    pytest.importorskip(
+        "langchain_ollama",
+        reason="langchain-ollama not installed - pip install -e '.[llm]'",
+    )
 
+
+def _skip_if_no_langchain_openai():
+    """Skip test if langchain-openai is not installed."""
+    pytest.importorskip(
+        "langchain_openai",
+        reason="langchain-openai not installed - pip install -e '.[llm]'",
+    )
+
+
+class TestLLMServiceCreation:
     def test_create_with_ollama_provider(self):
+        _skip_if_no_langchain_ollama()
+
         from fast_app.services.llm_service import LLMService
 
         config = Config(
@@ -29,6 +40,8 @@ class TestLLMServiceCreation:
         assert service._llm is not None
 
     def test_create_with_opencode_go_provider(self):
+        _skip_if_no_langchain_openai()
+
         from fast_app.services.llm_service import LLMService
 
         config = Config(
