@@ -16,3 +16,17 @@ services:
       - ${FOLDER_FOR_CONFIGS}/fast-app/output:/app/output
       - ${FOLDER_FOR_CONFIGS}/fast-app/.fast-app:/root/.fast-app
     restart: unless-stopped
+    labels:
+      - com.centurylinklabs.watchtower.enable=true
+
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=60
+      - WATCHTOWER_LABEL_ENABLE=true
+      - TZ=America/Los_Angeles
