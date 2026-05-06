@@ -24,7 +24,7 @@ from sqlmodel import Session, SQLModel, create_engine  # noqa: E402
 from fast_app.db import _session_dep, get_session  # noqa: E402
 from fast_app.models.db_models import User  # noqa: E402
 from fast_app.services.auth import get_current_user, hash_password  # noqa: E402
-from fast_app.webapp.profile_routes import router as profile_router  # noqa: E402
+from fast_app.webapp.profile_routes import router as profile_router  # noqa: E402  # noqa: E402
 
 
 def _make_profile_data(name="Test Profile", is_default=False):
@@ -272,3 +272,88 @@ class TestAuthDisabledMode:
         response = disabled_app_client.get("/api/profiles/default")
         # No default set yet, should be 404
         assert response.status_code == 404
+
+
+class TestPatchProfile:
+    """Test PATCH /api/profiles/{id} for partial profile updates."""
+
+    def test_patch_profile_updates_single_field(self, app_client):
+        create_data = _make_profile_data(name="Original", is_default=False)
+        create_resp = app_client.post("/api/profiles", json=create_data)
+        profile_id = create_resp.json()["id"]
+
+        patch_data = {"name": "Patched Name"}
+        response = app_client.patch(f"/api/profiles/{profile_id}", json=patch_data)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["name"] == "Patched Name"
+        assert data["profile_data"] == {"name": "Test User", "skills": ["Python"]}
+
+    def test_patch_profile_deep_merges_profile_data(self, app_client):
+        create_data = {
+            "name": "Test",
+            "profile_data": {
+                "name": "Original Name",
+                "email": "orig@test.com",
+                "skills": ["Python"],
+            },
+            "is_default": False,
+        }
+        create_resp = app_client.post("/api/profiles", json=create_data)
+        profile_id = create_resp.json()["id"]
+
+        patch_data = {"profile_data": {"email": "new@test.com"}}
+        response = app_client.patch(f"/api/profiles/{profile_id}", json=patch_data)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["profile_data"]["name"] == "Original Name"
+        assert data["profile_data"]["email"] == "new@test.com"
+        assert data["profile_data"]["skills"] == ["Python"]
+
+    def test_patch_profile_sets_default(self, app_client):
+        first = _make_profile_data(name="First", is_default=True)
+        app_client.post("/api/profiles", json=first)
+
+        second = _make_profile_data(name="Second", is_default=False)
+        second_resp = app_client.post("/api/profiles", json=second)
+        second_id = second_resp.json()["id"]
+
+        patch_data = {"is_default": True}
+        response = app_client.patch(f"/api/profiles/{second_id}", json=patch_data)
+        assert response.status_code == 200
+        assert response.json()["is_default"] is True
+
+        profiles = app_client.get("/api/profiles").json()
+        defaults = [p for p in profiles if p["is_default"]]
+        assert len(defaults) == 1
+        assert defaults[0]["id"] == second_id
+
+    def test_patch_profile_returns_404_for_nonexistent(self, app_client):
+        patch_data = {"name": "Ghost"}
+        response = app_client.patch("/api/profiles/9999", json=patch_data)
+        assert response.status_code == 404
+
+    def test_patch_profile_empty_body_preserves_data(self, app_client):
+        create_data = _make_profile_data(name="Preserved", is_default=False)
+        create_resp = app_client.post("/api/profiles", json=create_data)
+        profile_id = create_resp.json()["id"]
+
+        response = app_client.patch(f"/api/profiles/{profile_id}", json={})
+        assert response.status_code == 200
+        data = response.json()
+        assert data["name"] == "Preserved"
+        assert data["profile_data"] == {"name": "Test User", "skills": ["Python"]}
+
+    def test_patch_profile_replaces_list_in_profile_data(self, app_client):
+        create_data = {
+            "name": "Test",
+            "profile_data": {"skills": ["Python", "Go"]},
+            "is_default": False,
+        }
+        create_resp = app_client.post("/api/profiles", json=create_data)
+        profile_id = create_resp.json()["id"]
+
+        patch_data = {"profile_data": {"skills": ["Rust"]}}
+        response = app_client.patch(f"/api/profiles/{profile_id}", json=patch_data)
+        assert response.status_code == 200
+        assert response.json()["profile_data"]["skills"] == ["Rust"]

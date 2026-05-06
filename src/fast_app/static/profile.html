@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fast App - Profile</title>
+    <link rel="stylesheet" href="/static/style.css?v=2">
+    <link rel="stylesheet" href="/static/app.css?v=1">
+    <link rel="stylesheet" href="/static/profile.css?v=1">
+    <script src="/static/vendor/htmx.min.js"></script>
+    <script defer src="/static/vendor/alpine.min.js"></script>
+    <script src="/static/app-base.js"></script>
+    <script src="/static/navbar.js"></script>
+</head>
+<body>
+    <div class="container" x-data="profileEditor()">
+        <!-- Navbar -->
+        <nav class="navbar" x-show="true">
+            <div class="navbar-brand">
+                <a href="/" class="navbar-logo">🚀 Fast App</a>
+            </div>
+            <div class="navbar-links">
+                <a href="/" class="navbar-link">Generator</a>
+                <a href="/profile" class="navbar-link active">Profile</a>
+                <a href="/knowledge" class="navbar-link">Knowledge</a>
+                <a href="/chat" class="navbar-link">Chat</a>
+            </div>
+            <div class="navbar-auth" x-show="$store.auth.authEnabled">
+                <template x-if="$store.auth.isLoggedIn">
+                    <div class="navbar-user">
+                        <span class="navbar-email" x-text="$store.auth.user?.email || ''"></span>
+                        <button class="btn-navbar-logout" @click="$store.auth.logout()">Logout</button>
+                    </div>
+                </template>
+                <template x-if="!$store.auth.isLoggedIn">
+                    <a href="/login" class="navbar-link">Login</a>
+                </template>
+            </div>
+        </nav>
+
+        <!-- Empty State: No Profiles -->
+        <div x-show="profiles.length === 0 && !loading" x-transition class="empty-state">
+            <div class="empty-icon">👤</div>
+            <h2>Create Your First Profile</h2>
+            <p class="empty-desc">Profiles store your resume data — name, skills, experience, and more. They're used to generate tailored resumes.</p>
+            <div class="empty-actions">
+                <input type="text" x-model="newProfileName" placeholder="Profile name (e.g., General)" class="input-inline" @keydown.enter="addProfile()">
+                <button class="btn-primary" @click="addProfile()" :disabled="!newProfileName.trim()">Create Profile</button>
+            </div>
+            <div class="import-action">
+                <span>or</span>
+                <button class="btn-secondary" @click="importProfile()">Import from JSON</button>
+            </div>
+        </div>
+
+        <!-- Profile Editor -->
+        <div x-show="profiles.length > 0 && !loading" x-transition>
+            <!-- Profile Selector -->
+            <div class="profile-selector">
+                <label>Active Profile</label>
+                <div class="selector-row">
+                    <select x-model="activeProfileId" @change="switchProfile()" class="profile-select">
+                        <template x-for="p in profiles" :key="p.id">
+                            <option :value="p.id" x-text="p.name + (p.is_default ? ' (default)' : '')"></option>
+                        </template>
+                    </select>
+                    <button class="btn-secondary btn-sm" @click="addProfile()" title="New profile">+ New</button>
+                    <button class="btn-secondary btn-sm" @click="importProfile()" title="Import profile">Import</button>
+                </div>
+            </div>
+
+            <!-- Save Indicator -->
+            <div class="save-indicator" x-show="saveStatus" x-transition>
+                <span x-show="saveStatus === 'saving'" class="save-saving">Saving...</span>
+                <span x-show="saveStatus === 'saved'" class="save-saved">Saved ✓</span>
+                <span x-show="saveStatus === 'error'" class="save-error">Save failed</span>
+            </div>
+
+            <!-- New Profile Modal -->
+            <div x-show="showNewProfileModal" class="modal" @click.self="showNewProfileModal = false">
+                <div class="modal-content">
+                    <h3>Create New Profile</h3>
+                    <div class="form-group">
+                        <label for="new-profile-name">Profile Name</label>
+                        <input type="text" id="new-profile-name" x-model="newProfileName" placeholder="e.g., Engineering Lead" @keydown.enter="confirmNewProfile()">
+                    </div>
+                    <div class="modal-buttons">
+                        <button class="btn-secondary" @click="showNewProfileModal = false">Cancel</button>
+                        <button class="btn-primary" @click="confirmNewProfile()" :disabled="!newProfileName.trim()">Create</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Delete Confirmation Modal -->
+            <div x-show="showDeleteConfirm" class="modal" @click.self="showDeleteConfirm = false">
+                <div class="modal-content">
+                    <h3>Delete Profile</h3>
+                    <p>Are you sure you want to delete "<span x-text="activeProfile?.name || ''"></span>"? This cannot be undone.</p>
+                    <div class="modal-buttons">
+                        <button class="btn-secondary" @click="showDeleteConfirm = false">Cancel</button>
+                        <button class="btn-danger" @click="deleteProfile()">Delete</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Edit Form -->
+            <template x-if="activeProfile">
+                <div class="profile-form">
+                    <!-- Profile Name & Default Toggle -->
+                    <div class="form-row">
+                        <div class="form-group form-group-wide">
+                            <label for="profile-name">Profile Name</label>
+                            <input type="text" id="profile-name" x-model="activeProfile.name" @input="saveField('name', activeProfile.name)" placeholder="e.g., General, Engineering Lead">
+                        </div>
+                        <div class="form-group form-group-narrow">
+                            <label>Default</label>
+                            <div class="toggle-wrapper">
+                                <button class="toggle-btn" :class="{ active: activeProfile.is_default }" @click="toggleDefault()">
+                                    <span x-text="activeProfile.is_default ? '✓ Default' : 'Set as default'"></span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="section-divider">
+
+                    <!-- Basic Info Section -->
+                    <h3 class="section-title">Basic Information</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="field-name">Full Name</label>
+                            <input type="text" id="field-name" x-model="formData.name" @input="saveFieldDebounced('profile_data', { name: formData.name })" placeholder="John Doe">
+                        </div>
+                        <div class="form-group">
+                            <label for="field-email">Email</label>
+                            <input type="email" id="field-email" x-model="formData.email" @input="saveFieldDebounced('profile_data', { email: formData.email })" placeholder="john@example.com">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="field-phone">Phone</label>
+                            <input type="tel" id="field-phone" x-model="formData.phone" @input="saveFieldDebounced('profile_data', { phone: formData.phone })" placeholder="+1 (555) 123-4567">
+                        </div>
+                        <div class="form-group">
+                            <label for="field-location">Location</label>
+                            <input type="text" id="field-location" x-model="formData.location" @input="saveFieldDebounced('profile_data', { location: formData.location })" placeholder="San Francisco, CA">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="field-headline">Headline</label>
+                        <input type="text" id="field-headline" x-model="formData.headline" @input="saveFieldDebounced('profile_data', { headline: formData.headline })" placeholder="Senior Software Engineer">
+                    </div>
+                    <div class="form-group">
+                        <label for="field-summary">Summary</label>
+                        <textarea id="field-summary" x-model="formData.summary" @input="saveFieldDebounced('profile_data', { summary: formData.summary })" placeholder="Brief professional summary..." rows="4"></textarea>
+                    </div>
+
+                    <hr class="section-divider">
+
+                    <!-- Skills Section -->
+                    <h3 class="section-title">Skills</h3>
+                    <div class="tag-input">
+                        <div class="tags-container">
+                            <template x-for="(skill, idx) in formData.skills" :key="idx">
+                                <span class="tag">
+                                    <span x-text="skill"></span>
+                                    <button class="tag-remove" @click="removeSkill(idx)">×</button>
+                                </span>
+                            </template>
+                        </div>
+                        <div class="tag-input-row">
+                            <input type="text" x-model="newSkill" placeholder="Add a skill..." @keydown.enter.prevent="addSkill()">
+                        </div>
+                    </div>
+
+                    <hr class="section-divider">
+
+                    <!-- Experience Section -->
+                    <h3 class="section-title">Experience</h3>
+                    <template x-for="(exp, idx) in formData.experience" :key="idx">
+                        <div class="repeater-item">
+                            <div class="repeater-header">
+                                <span class="repeater-title" x-text="exp.title || 'New Experience'"></span>
+                                <button class="btn-icon btn-remove" @click="removeExperience(idx)" title="Remove">✕</button>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Title</label>
+                                    <input type="text" x-model="exp.title" @input="saveFieldDebounced('profile_data', { experience: formData.experience })" placeholder="Senior Engineer">
+                                </div>
+                                <div class="form-group">
+                                    <label>Company</label>
+                                    <input type="text" x-model="exp.company" @input="saveFieldDebounced('profile_data', { experience: formData.experience })" placeholder="Acme Corp">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Start Date</label>
+                                    <input type="text" x-model="exp.startDate" @input="saveFieldDebounced('profile_data', { experience: formData.experience })" placeholder="Jan 2020">
+                                </div>
+                                <div class="form-group">
+                                    <label>End Date</label>
+                                    <input type="text" x-model="exp.endDate" @input="saveFieldDebounced('profile_data', { experience: formData.experience })" placeholder="Present">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Summary</label>
+                                <textarea x-model="exp.summary" @input="saveFieldDebounced('profile_data', { experience: formData.experience })" placeholder="Key achievements and responsibilities..." rows="3"></textarea>
+                            </div>
+                        </div>
+                    </template>
+                    <button class="btn-secondary btn-add" @click="addExperience()">+ Add Experience</button>
+
+                    <hr class="section-divider">
+
+                    <!-- Education Section -->
+                    <h3 class="section-title">Education</h3>
+                    <template x-for="(edu, idx) in formData.education" :key="idx">
+                        <div class="repeater-item">
+                            <div class="repeater-header">
+                                <span class="repeater-title" x-text="edu.institution || 'New Education'"></span>
+                                <button class="btn-icon btn-remove" @click="removeEducation(idx)" title="Remove">✕</button>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Institution</label>
+                                    <input type="text" x-model="edu.institution" @input="saveFieldDebounced('profile_data', { education: formData.education })" placeholder="MIT">
+                                </div>
+                                <div class="form-group">
+                                    <label>Degree</label>
+                                    <input type="text" x-model="edu.degree" @input="saveFieldDebounced('profile_data', { education: formData.education })" placeholder="B.S. Computer Science">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Start Date</label>
+                                    <input type="text" x-model="edu.startDate" @input="saveFieldDebounced('profile_data', { education: formData.education })" placeholder="Sep 2016">
+                                </div>
+                                <div class="form-group">
+                                    <label>End Date</label>
+                                    <input type="text" x-model="edu.endDate" @input="saveFieldDebounced('profile_data', { education: formData.education })" placeholder="Jun 2020">
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                    <button class="btn-secondary btn-add" @click="addEducation()">+ Add Education</button>
+
+                    <hr class="section-divider">
+
+                    <!-- Certifications Section -->
+                    <h3 class="section-title">Certifications</h3>
+                    <div class="tag-input">
+                        <div class="tags-container">
+                            <template x-for="(cert, idx) in formData.certifications" :key="idx">
+                                <span class="tag">
+                                    <span x-text="cert"></span>
+                                    <button class="tag-remove" @click="removeCertification(idx)">×</button>
+                                </span>
+                            </template>
+                        </div>
+                        <div class="tag-input-row">
+                            <input type="text" x-model="newCertification" placeholder="Add a certification..." @keydown.enter.prevent="addCertification()">
+                        </div>
+                    </div>
+
+                    <hr class="section-divider">
+
+                    <!-- Projects Section -->
+                    <h3 class="section-title">Projects</h3>
+                    <template x-for="(proj, idx) in formData.projects" :key="idx">
+                        <div class="repeater-item">
+                            <div class="repeater-header">
+                                <span class="repeater-title" x-text="proj.name || 'New Project'"></span>
+                                <button class="btn-icon btn-remove" @click="removeProject(idx)" title="Remove">✕</button>
+                            </div>
+                            <div class="form-group">
+                                <label>Project Name</label>
+                                <input type="text" x-model="proj.name" @input="saveFieldDebounced('profile_data', { projects: formData.projects })" placeholder="My Project">
+                            </div>
+                            <div class="form-group">
+                                <label>Description</label>
+                                <textarea x-model="proj.description" @input="saveFieldDebounced('profile_data', { projects: formData.projects })" placeholder="Brief description..." rows="2"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>URL</label>
+                                <input type="url" x-model="proj.url" @input="saveFieldDebounced('profile_data', { projects: formData.projects })" placeholder="https://github.com/...">
+                            </div>
+                        </div>
+                    </template>
+                    <button class="btn-secondary btn-add" @click="addProject()">+ Add Project</button>
+
+                    <hr class="section-divider">
+
+                    <!-- Actions -->
+                    <div class="profile-actions">
+                        <button class="btn-secondary" @click="exportProfile()">Export JSON</button>
+                        <button class="btn-danger" @click="showDeleteConfirm = true">Delete Profile</button>
+                    </div>
+                </div>
+            </template>
+        </div>
+
+        <!-- Loading State -->
+        <div x-show="loading" class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading profiles...</p>
+        </div>
+
+        <!-- Error State -->
+        <div x-show="error" x-transition class="error-message" x-text="error"></div>
+    </div>
+
+    <!-- Hidden file input for import -->
+    <input type="file" id="import-file-input" accept=".json" style="display:none" @change="handleImportFile($event)">
+
+    <script src="/static/profile.js?v=1"></script>
+</body>
+</html>
