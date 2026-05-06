@@ -6,7 +6,7 @@
     <title>Fast App - Profile</title>
     <link rel="stylesheet" href="/static/style.css?v=2">
     <link rel="stylesheet" href="/static/app.css?v=1">
-    <link rel="stylesheet" href="/static/profile.css?v=1">
+    <link rel="stylesheet" href="/static/profile.css?v=2">
     <script src="/static/vendor/htmx.min.js"></script>
     <script defer src="/static/vendor/alpine.min.js"></script>
     <script src="/static/app-base.js"></script>
@@ -129,49 +129,62 @@
                     <div class="form-row">
                         <div class="form-group">
                             <label for="field-name">Full Name</label>
-                            <input type="text" id="field-name" x-model="formData.name" @input="saveFieldDebounced('profile_data', { name: formData.name })" placeholder="John Doe">
+                            <input type="text" id="field-name" x-model="formData.name" @input="saveProfileSection('basics')" placeholder="John Doe">
                         </div>
                         <div class="form-group">
                             <label for="field-email">Email</label>
-                            <input type="email" id="field-email" x-model="formData.email" @input="saveFieldDebounced('profile_data', { email: formData.email })" placeholder="john@example.com">
+                            <input type="email" id="field-email" x-model="formData.email" @input="saveProfileSection('basics')" placeholder="john@example.com">
                         </div>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
                             <label for="field-phone">Phone</label>
-                            <input type="tel" id="field-phone" x-model="formData.phone" @input="saveFieldDebounced('profile_data', { phone: formData.phone })" placeholder="+1 (555) 123-4567">
+                            <input type="tel" id="field-phone" x-model="formData.phone" @input="saveProfileSection('basics')" placeholder="+1 (555) 123-4567">
                         </div>
                         <div class="form-group">
                             <label for="field-location">Location</label>
-                            <input type="text" id="field-location" x-model="formData.location" @input="saveFieldDebounced('profile_data', { location: formData.location })" placeholder="San Francisco, CA">
+                            <input type="text" id="field-location" x-model="formData.location" @input="saveProfileSection('basics')" placeholder="San Francisco, CA">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="field-headline">Headline</label>
+                            <input type="text" id="field-headline" x-model="formData.headline" @input="saveProfileSection('basics')" placeholder="Senior Software Engineer">
+                        </div>
+                        <div class="form-group">
+                            <label for="field-website">Website</label>
+                            <input type="url" id="field-website" x-model="formData.website" @input="saveProfileSection('basics')" placeholder="https://johndoe.com">
                         </div>
                     </div>
                     <div class="form-group">
-                        <label for="field-headline">Headline</label>
-                        <input type="text" id="field-headline" x-model="formData.headline" @input="saveFieldDebounced('profile_data', { headline: formData.headline })" placeholder="Senior Software Engineer">
-                    </div>
-                    <div class="form-group">
                         <label for="field-summary">Summary</label>
-                        <textarea id="field-summary" x-model="formData.summary" @input="saveFieldDebounced('profile_data', { summary: formData.summary })" placeholder="Brief professional summary..." rows="4"></textarea>
+                        <textarea id="field-summary" x-model="formData.summary" @input="saveProfileSection('basics')" placeholder="Brief professional summary..." rows="4"></textarea>
                     </div>
 
                     <hr class="section-divider">
 
                     <!-- Skills Section -->
                     <h3 class="section-title">Skills</h3>
-                    <div class="tag-input">
-                        <div class="tags-container">
-                            <template x-for="(skill, idx) in formData.skills" :key="idx">
-                                <span class="tag">
-                                    <span x-text="skill"></span>
-                                    <button class="tag-remove" @click="removeSkill(idx)">×</button>
-                                </span>
-                            </template>
+                    <template x-for="(group, gIdx) in formData.skillGroups" :key="gIdx">
+                        <div class="skill-group">
+                            <div class="skill-group-header">
+                                <input type="text" x-model="group.name" @input="saveProfileSection('skills')" placeholder="Category name (e.g., Programming Languages)" class="skill-group-name">
+                                <button class="btn-icon btn-remove" @click="removeSkillGroup(gIdx)" title="Remove group">✕</button>
+                            </div>
+                            <div class="keyword-tags">
+                                <template x-for="(kw, kwIdx) in group.keywords" :key="kwIdx">
+                                    <span class="tag">
+                                        <span x-text="kw"></span>
+                                        <button class="tag-remove" @click="removeKeywordFromGroup(gIdx, kwIdx)">×</button>
+                                    </span>
+                                </template>
+                            </div>
+                            <div class="tag-input-row">
+                                <input type="text" x-model="newKeywordInputs[gIdx]" placeholder="Add a skill..." @keydown.enter.prevent="addKeywordToGroup(gIdx)">
+                            </div>
                         </div>
-                        <div class="tag-input-row">
-                            <input type="text" x-model="newSkill" placeholder="Add a skill..." @keydown.enter.prevent="addSkill()">
-                        </div>
-                    </div>
+                    </template>
+                    <button class="btn-secondary btn-add" @click="addSkillGroup()">+ Add Skill Group</button>
 
                     <hr class="section-divider">
 
@@ -180,32 +193,44 @@
                     <template x-for="(exp, idx) in formData.experience" :key="idx">
                         <div class="repeater-item">
                             <div class="repeater-header">
-                                <span class="repeater-title" x-text="exp.title || 'New Experience'"></span>
+                                <span class="repeater-title" x-text="exp.title || exp.company || 'New Experience'"></span>
                                 <button class="btn-icon btn-remove" @click="removeExperience(idx)" title="Remove">✕</button>
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
                                     <label>Title</label>
-                                    <input type="text" x-model="exp.title" @input="saveFieldDebounced('profile_data', { experience: formData.experience })" placeholder="Senior Engineer">
+                                    <input type="text" x-model="exp.title" @input="saveProfileSection('work')" placeholder="Senior Engineer">
                                 </div>
                                 <div class="form-group">
                                     <label>Company</label>
-                                    <input type="text" x-model="exp.company" @input="saveFieldDebounced('profile_data', { experience: formData.experience })" placeholder="Acme Corp">
+                                    <input type="text" x-model="exp.company" @input="saveProfileSection('work')" placeholder="Acme Corp">
                                 </div>
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
                                     <label>Start Date</label>
-                                    <input type="text" x-model="exp.startDate" @input="saveFieldDebounced('profile_data', { experience: formData.experience })" placeholder="Jan 2020">
+                                    <input type="text" x-model="exp.startDate" @input="saveProfileSection('work')" placeholder="Jan 2020">
                                 </div>
                                 <div class="form-group">
                                     <label>End Date</label>
-                                    <input type="text" x-model="exp.endDate" @input="saveFieldDebounced('profile_data', { experience: formData.experience })" placeholder="Present">
+                                    <input type="text" x-model="exp.endDate" @input="saveProfileSection('work')" placeholder="Present">
                                 </div>
                             </div>
                             <div class="form-group">
                                 <label>Summary</label>
-                                <textarea x-model="exp.summary" @input="saveFieldDebounced('profile_data', { experience: formData.experience })" placeholder="Key achievements and responsibilities..." rows="3"></textarea>
+                                <textarea x-model="exp.summary" @input="saveProfileSection('work')" placeholder="Key achievements and responsibilities..." rows="3"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label>Highlights</label>
+                                <div class="highlights-container">
+                                    <template x-for="(hl, hlIdx) in exp.highlights" :key="hlIdx">
+                                        <div class="highlight-item">
+                                            <input type="text" x-model="exp.highlights[hlIdx]" @input="saveProfileSection('work')" placeholder="Key achievement...">
+                                            <button class="btn-icon btn-remove" @click="removeHighlight(idx, hlIdx)" title="Remove">✕</button>
+                                        </div>
+                                    </template>
+                                </div>
+                                <button class="btn-secondary btn-sm" @click="addHighlight(idx)">+ Add Highlight</button>
                             </div>
                         </div>
                     </template>
@@ -224,22 +249,26 @@
                             <div class="form-row">
                                 <div class="form-group">
                                     <label>Institution</label>
-                                    <input type="text" x-model="edu.institution" @input="saveFieldDebounced('profile_data', { education: formData.education })" placeholder="MIT">
+                                    <input type="text" x-model="edu.institution" @input="saveProfileSection('education')" placeholder="MIT">
                                 </div>
                                 <div class="form-group">
-                                    <label>Degree</label>
-                                    <input type="text" x-model="edu.degree" @input="saveFieldDebounced('profile_data', { education: formData.education })" placeholder="B.S. Computer Science">
+                                    <label>Area</label>
+                                    <input type="text" x-model="edu.area" @input="saveProfileSection('education')" placeholder="Computer Science">
                                 </div>
                             </div>
                             <div class="form-row">
                                 <div class="form-group">
-                                    <label>Start Date</label>
-                                    <input type="text" x-model="edu.startDate" @input="saveFieldDebounced('profile_data', { education: formData.education })" placeholder="Sep 2016">
+                                    <label>Degree / Study Type</label>
+                                    <input type="text" x-model="edu.studyType" @input="saveProfileSection('education')" placeholder="B.S.">
                                 </div>
                                 <div class="form-group">
-                                    <label>End Date</label>
-                                    <input type="text" x-model="edu.endDate" @input="saveFieldDebounced('profile_data', { education: formData.education })" placeholder="Jun 2020">
+                                    <label>Start Date</label>
+                                    <input type="text" x-model="edu.startDate" @input="saveProfileSection('education')" placeholder="Sep 2016">
                                 </div>
+                            </div>
+                            <div class="form-group">
+                                <label>End Date</label>
+                                <input type="text" x-model="edu.endDate" @input="saveProfileSection('education')" placeholder="Jun 2020">
                             </div>
                         </div>
                     </template>
@@ -247,21 +276,108 @@
 
                     <hr class="section-divider">
 
-                    <!-- Certifications Section -->
-                    <h3 class="section-title">Certifications</h3>
+                    <!-- Certificates Section -->
+                    <h3 class="section-title">Certificates</h3>
+                    <template x-for="(cert, idx) in formData.certificates" :key="idx">
+                        <div class="repeater-item">
+                            <div class="repeater-header">
+                                <span class="repeater-title" x-text="cert.name || 'New Certificate'"></span>
+                                <button class="btn-icon btn-remove" @click="removeCertificate(idx)" title="Remove">✕</button>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Name</label>
+                                    <input type="text" x-model="cert.name" @input="saveProfileSection('certificates')" placeholder="AWS Solutions Architect">
+                                </div>
+                                <div class="form-group">
+                                    <label>Issuer</label>
+                                    <input type="text" x-model="cert.issuer" @input="saveProfileSection('certificates')" placeholder="Amazon Web Services">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Date</label>
+                                <input type="text" x-model="cert.date" @input="saveProfileSection('certificates')" placeholder="2023-01">
+                            </div>
+                        </div>
+                    </template>
+                    <button class="btn-secondary btn-add" @click="addCertificate()">+ Add Certificate</button>
+
+                    <hr class="section-divider">
+
+                    <!-- Awards Section -->
+                    <h3 class="section-title">Awards</h3>
+                    <template x-for="(award, idx) in formData.awards" :key="idx">
+                        <div class="repeater-item">
+                            <div class="repeater-header">
+                                <span class="repeater-title" x-text="award.title || 'New Award'"></span>
+                                <button class="btn-icon btn-remove" @click="removeAward(idx)" title="Remove">✕</button>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Title</label>
+                                    <input type="text" x-model="award.title" @input="saveProfileSection('awards')" placeholder="Best Paper Award">
+                                </div>
+                                <div class="form-group">
+                                    <label>Awarder</label>
+                                    <input type="text" x-model="award.awarder" @input="saveProfileSection('awards')" placeholder="IEEE">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Date</label>
+                                <input type="text" x-model="award.date" @input="saveProfileSection('awards')" placeholder="2023-06">
+                            </div>
+                        </div>
+                    </template>
+                    <button class="btn-secondary btn-add" @click="addAward()">+ Add Award</button>
+
+                    <hr class="section-divider">
+
+                    <!-- Interests Section -->
+                    <h3 class="section-title">Interests</h3>
                     <div class="tag-input">
                         <div class="tags-container">
-                            <template x-for="(cert, idx) in formData.certifications" :key="idx">
+                            <template x-for="(interest, idx) in formData.interests" :key="idx">
                                 <span class="tag">
-                                    <span x-text="cert"></span>
-                                    <button class="tag-remove" @click="removeCertification(idx)">×</button>
+                                    <span x-text="interest"></span>
+                                    <button class="tag-remove" @click="removeInterest(idx)">×</button>
                                 </span>
                             </template>
                         </div>
                         <div class="tag-input-row">
-                            <input type="text" x-model="newCertification" placeholder="Add a certification..." @keydown.enter.prevent="addCertification()">
+                            <input type="text" x-model="newInterest" placeholder="Add an interest..." @keydown.enter.prevent="addInterest()">
                         </div>
                     </div>
+
+                    <hr class="section-divider">
+
+                    <!-- Languages Section -->
+                    <h3 class="section-title">Languages</h3>
+                    <template x-for="(lang, idx) in formData.languages" :key="idx">
+                        <div class="repeater-item">
+                            <div class="repeater-header">
+                                <span class="repeater-title" x-text="lang.language || 'New Language'"></span>
+                                <button class="btn-icon btn-remove" @click="removeLanguage(idx)" title="Remove">✕</button>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Language</label>
+                                    <input type="text" x-model="lang.language" @input="saveProfileSection('languages')" placeholder="English">
+                                </div>
+                                <div class="form-group">
+                                    <label>Fluency</label>
+                                    <select x-model="lang.fluency" @change="saveProfileSection('languages')" class="profile-select">
+                                        <option value="">Select...</option>
+                                        <option value="Native">Native</option>
+                                        <option value="Fluent">Fluent</option>
+                                        <option value="Advanced">Advanced</option>
+                                        <option value="Intermediate">Intermediate</option>
+                                        <option value="Beginner">Beginner</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                    <button class="btn-secondary btn-add" @click="addLanguage()">+ Add Language</button>
 
                     <hr class="section-divider">
 
@@ -275,19 +391,94 @@
                             </div>
                             <div class="form-group">
                                 <label>Project Name</label>
-                                <input type="text" x-model="proj.name" @input="saveFieldDebounced('profile_data', { projects: formData.projects })" placeholder="My Project">
+                                <input type="text" x-model="proj.name" @input="saveProfileSection('projects')" placeholder="My Project">
                             </div>
                             <div class="form-group">
                                 <label>Description</label>
-                                <textarea x-model="proj.description" @input="saveFieldDebounced('profile_data', { projects: formData.projects })" placeholder="Brief description..." rows="2"></textarea>
+                                <textarea x-model="proj.description" @input="saveProfileSection('projects')" placeholder="Brief description..." rows="2"></textarea>
                             </div>
-                            <div class="form-group">
-                                <label>URL</label>
-                                <input type="url" x-model="proj.url" @input="saveFieldDebounced('profile_data', { projects: formData.projects })" placeholder="https://github.com/...">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>URL</label>
+                                    <input type="url" x-model="proj.url" @input="saveProfileSection('projects')" placeholder="https://github.com/...">
+                                </div>
+                                <div class="form-group">
+                                    <label>Start Date</label>
+                                    <input type="text" x-model="proj.startDate" @input="saveProfileSection('projects')" placeholder="Jan 2023">
+                                </div>
                             </div>
                         </div>
                     </template>
                     <button class="btn-secondary btn-add" @click="addProject()">+ Add Project</button>
+
+                    <hr class="section-divider">
+
+                    <!-- Work Preferences Section -->
+                    <h3 class="section-title">Work Preferences</h3>
+                    <div class="preference-section">
+                        <div class="form-group">
+                            <label>Remote Work</label>
+                            <div class="toggle-wrapper">
+                                <button class="toggle-btn" :class="{ active: formData.preferences.remote }" @click="formData.preferences.remote = !formData.preferences.remote; saveProfileSection('workPreferences')">
+                                    <span x-text="formData.preferences.remote ? 'Yes, remote' : 'No preference'"></span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>What I'm Looking For</label>
+                            <textarea x-model="formData.preferences.whatLookingFor" @input="saveProfileSection('workPreferences')" placeholder="Describe what you're looking for in your next role..." rows="3"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Relocation Preferences</label>
+                            <div class="tags-container">
+                                <template x-for="(loc, idx) in formData.preferences.relocationPreferences" :key="idx">
+                                    <span class="tag">
+                                        <span x-text="loc"></span>
+                                        <button class="tag-remove" @click="removeRelocationPref(idx)">×</button>
+                                    </span>
+                                </template>
+                            </div>
+                            <div class="tag-input-row">
+                                <input type="text" x-model="newRelocationPref" placeholder="Add a location..." @keydown.enter.prevent="addRelocationPref()">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Employment Types</label>
+                            <div class="tags-container">
+                                <template x-for="(type, idx) in formData.preferences.employmentTypes" :key="idx">
+                                    <span class="tag">
+                                        <span x-text="type"></span>
+                                        <button class="tag-remove" @click="removeEmploymentType(idx)">×</button>
+                                    </span>
+                                </template>
+                            </div>
+                            <div class="tag-input-row">
+                                <input type="text" x-model="newEmploymentType" placeholder="Add employment type..." @keydown.enter.prevent="addEmploymentType()">
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="section-divider">
+
+                    <!-- Narratives Section -->
+                    <h3 class="section-title">Narratives</h3>
+                    <template x-for="(narr, idx) in formData.narratives" :key="idx">
+                        <div class="narrative-item">
+                            <div class="repeater-header">
+                                <select x-model="narr.type" @change="saveProfileSection('narratives')" class="profile-select narrative-type-select">
+                                    <option value="summary">Summary</option>
+                                    <option value="coverLetter">Cover Letter</option>
+                                    <option value="custom">Custom</option>
+                                </select>
+                                <button class="btn-icon btn-remove" @click="removeNarrative(idx)" title="Remove">✕</button>
+                            </div>
+                            <div class="form-group">
+                                <label>Content</label>
+                                <textarea x-model="narr.content" @input="saveProfileSection('narratives')" placeholder="Write your narrative..." rows="4"></textarea>
+                            </div>
+                        </div>
+                    </template>
+                    <button class="btn-secondary btn-add" @click="addNarrative()">+ Add Narrative</button>
 
                     <hr class="section-divider">
 
@@ -313,6 +504,6 @@
     <!-- Hidden file input for import -->
     <input type="file" id="import-file-input" accept=".json" style="display:none" @change="handleImportFile($event)">
 
-    <script src="/static/profile.js?v=1"></script>
+    <script src="/static/profile.js?v=2"></script>
 </body>
 </html>
