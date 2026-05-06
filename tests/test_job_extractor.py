@@ -14,6 +14,7 @@ from fast_app.services.job_extractor import (
     _is_workday_url,
     _parse_workday_url,
 )
+from fast_app.utils.text import strip_markdown_json
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -461,21 +462,21 @@ class TestFetchWithRequests:
 
 class TestStripMarkdownJson:
     def test_strips_json_block(self, extractor):
-        result = extractor._strip_markdown_json('```json\n{"key": "value"}\n```')
+        result = strip_markdown_json('```json\n{"key": "value"}\n```')
         assert "key" in result and "value" in result
         assert "```" not in result
 
     def test_strips_code_block(self, extractor):
-        result = extractor._strip_markdown_json('```\n{"key": "value"}\n```')
+        result = strip_markdown_json('```\n{"key": "value"}\n```')
         assert result == '{"key": "value"}'
 
     def test_returns_unchanged_if_no_block(self, extractor):
         content = '{"key": "value"}'
-        result = extractor._strip_markdown_json(content)
+        result = strip_markdown_json(content)
         assert result == content
 
     def test_handles_whitespace(self, extractor):
-        result = extractor._strip_markdown_json('  ```json\n  {"key": "value"}\n  ```  ')
+        result = strip_markdown_json('  ```json\n  {"key": "value"}\n  ```  ')
         assert "key" in result and "value" in result
 
 

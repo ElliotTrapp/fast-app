@@ -15,6 +15,7 @@ from ..models.db_models import User
 from ..services.auth import get_current_user, is_auth_enabled
 from .auth_routes import router as auth_router
 from .background_tasks import process_job
+from .dependencies import resolve_user_id
 from .job_search_routes import router as job_search_router
 from .knowledge_routes import router as knowledge_router
 from .log_stream import log_broadcaster
@@ -26,17 +27,6 @@ current_task: asyncio.Task | None = None
 
 # Per-user task tracking: user_id -> asyncio.Task
 user_tasks: dict[int, asyncio.Task] = {}
-
-
-def _resolve_user_id(user: User | None) -> int:
-    """Resolve the effective user ID from the authenticated user.
-
-    In auth-disabled mode (user is None), returns the default user ID (1).
-    In auth-enabled mode, returns the authenticated user's ID.
-    """
-    if user is None:
-        return 1
-    return user.id
 
 
 @asynccontextmanager
@@ -144,13 +134,13 @@ async def auth_guard(request: Request, call_next):
 
     if token:
         try:
-            from ..services.auth import decode_access_token
+            from ..services.auth_core import decode_access_token
 
             payload = decode_access_token(token)
             user_id = int(payload.get("sub", 0))
             if user_id > 0:
                 return await call_next(request)
-        except (ValueError, Exception):
+        except Exception:
             pass
 
     return RedirectResponse(url="/login", status_code=303)
@@ -163,9 +153,9 @@ def _is_auth_enabled_cached() -> bool:
     """Check if auth is enabled, caching the result for 60 seconds."""
     import time
 
-    from ..services.auth import SECRET_KEY
+    from ..services.auth_core import JWT_SECRET
 
-    cache_key = SECRET_KEY or "no_secret"
+    cache_key = JWT_SECRET or "no_secret"
     now = time.time()
     cached = _auth_enabled_cache.get(cache_key)
     if cached is not None:
@@ -173,7 +163,7 @@ def _is_auth_enabled_cached() -> bool:
         if now - cached_time < 60:
             return cached_value
 
-    if SECRET_KEY:
+    if JWT_SECRET:
         _auth_enabled_cache[cache_key] = (now, True)
         return True
 
@@ -268,7 +258,7 @@ async def health():
 @app.get("/api/status")
 async def get_status(user: User | None = Depends(get_current_user)):
     """Get current job status for the authenticated user."""
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
     sm = per_user_state.get_state(user_id)
     return sm.to_dict()
 
@@ -281,7 +271,7 @@ async def submit_job(request: dict[str, Any], user: User | None = Depends(get_cu
     - URL mode: {"url": "https://..."}
     - Text mode: {"title": "Job Title", "content": "Job description text..."}
     """
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
     sm = per_user_state.get_state(user_id)
 
     url = request.get("url", "")
@@ -331,7 +321,7 @@ async def submit_job(request: dict[str, Any], user: User | None = Depends(get_cu
 @app.get("/api/question")
 async def get_question(user: User | None = Depends(get_current_user)):
     """Get the current question."""
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
     sm = per_user_state.get_state(user_id)
 
     if sm.state.value != "waiting_questions":
@@ -347,7 +337,7 @@ async def get_question(user: User | None = Depends(get_current_user)):
 @app.post("/api/answer")
 async def submit_answer(request: dict[str, Any], user: User | None = Depends(get_current_user)):
     """Submit an answer to the current question."""
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
     sm = per_user_state.get_state(user_id)
 
     if sm.state.value != "waiting_questions":
@@ -376,7 +366,7 @@ async def submit_answer(request: dict[str, Any], user: User | None = Depends(get
 @app.post("/api/reset")
 async def reset_job(user: User | None = Depends(get_current_user)):
     """Reset the job state."""
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
     sm = per_user_state.get_state(user_id)
 
     # Cancel any running task for this user
