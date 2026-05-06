@@ -68,4 +68,3 @@ class PerUserStateManager:
 
 
 per_user_state = PerUserStateManager()
-

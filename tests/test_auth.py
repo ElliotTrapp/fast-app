@@ -479,9 +479,7 @@ class TestLogout:
         response = client.post("/api/auth/logout", follow_redirects=False)
         assert response.status_code == 200
         # The response should include a Set-Cookie header that clears the token
-        set_cookie_headers = [
-            v for k, v in response.headers.items() if k.lower() == "set-cookie"
-        ]
+        set_cookie_headers = [v for k, v in response.headers.items() if k.lower() == "set-cookie"]
         assert any("fast_app_token" in h for h in set_cookie_headers)
 
     def test_logout_returns_logged_out_status(self):
