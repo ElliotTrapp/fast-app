@@ -1,10 +1,8 @@
-"""Cover letter specific utilities."""
+"""Cover letter merge service."""
 
 import copy
 import uuid
 from typing import Any
-
-import click
 
 from ..log import logger
 from ..models import CoverLetterData
@@ -86,10 +84,10 @@ def merge_cover_letter_with_base(
         # No need to override with generated content
 
         # Find and update the Cover Letter custom section
-        custom_sections = result.get("customSections", [])
+        custom_functions = result.get("customSections", [])
         cover_letter_section_idx = None
 
-        for idx, section in enumerate(custom_sections):
+        for idx, section in enumerate(custom_functions):
             if section.get("type") == "cover-letter" or section.get("title") == "Cover Letter":
                 cover_letter_section_idx = idx
                 break
@@ -147,94 +145,17 @@ def merge_cover_letter_with_base(
         return validated.model_dump()
     except Exception as e:
         logger.error(f"Cover letter data validation failed: {e}")
-        click.echo(click.style("\n❌ Cover letter data validation failed:", fg="red"))
-        click.echo(click.style(f"   {str(e)}", fg="yellow"))
-
-        # Show what we have
-        click.echo(click.style("\n📊 Generated content:", fg="cyan"))
-        click.echo(f"   Recipient length: {len(recipient)}")
-        click.echo(f"   Content length: {len(cover_letter_content)}")
-
-        click.echo(click.style("\n📊 Profile data:", fg="cyan"))
-        click.echo(f"   Basics keys: {list(profile.get('basics', {}).keys())}")
+        logger.error(f"Recipient length: {len(recipient)}")
+        logger.error(f"Content length: {len(cover_letter_content)}")
+        logger.error(f"Profile basics keys: {list(profile.get('basics', {}).keys())}")
 
         if base:
-            click.echo(click.style("\n📊 Base template structure:", fg="cyan"))
-            click.echo(f"   Keys: {list(base.keys())}")
+            logger.error(f"Base template keys: {list(base.keys())}")
             if "customSections" in base:
-                click.echo(f"   Custom sections: {len(base.get('customSections', []))}")
+                logger.error(f"Base custom sections count: {len(base.get('customSections', []))}")
 
-        click.echo(click.style("\n📊 Merged result structure:", fg="cyan"))
-        click.echo(f"   Keys: {list(result.keys())}")
-        click.echo(f"   Has basics: {'basics' in result}")
-        click.echo(f"   Has customSections: {'customSections' in result}")
+        logger.error(f"Merged result keys: {list(result.keys())}")
+        logger.error(f"Has basics: {'basics' in result}")
+        logger.error(f"Has customSections: {'customSections' in result}")
 
         raise ValueError(f"Cover letter data validation failed: {e}") from e
-
-
-def check_existing_cover_letter(
-    rr_client,  # ReactiveResumeClient
-    cache,  # CacheManager
-    job_dir,
-    overwrite: bool,
-) -> str | None:
-    """Check for existing cover letter and handle --overwrite flag.
-
-    Uses the cover_letter_id from cache to check if it still exists in Reactive Resume.
-    Does NOT search by title - uses direct ID lookup.
-
-    Args:
-        rr_client: Reactive Resume client
-        cache: Cache manager
-        job_dir: Job directory
-        overwrite: Whether to overwrite existing
-
-    Returns:
-        Cover letter ID if one exists (and should be deleted), None otherwise
-
-    Raises:
-        click.ClickException: If cover letter exists and overwrite is False
-    """
-    cached_cover_letter = cache.get_cached_reactive_cover_letter(job_dir)
-    existing_id: str | None = None
-
-    # Check cache for cover letter ID
-    if cached_cover_letter:
-        existing_id = cached_cover_letter.get("cover_letter_id")
-        if existing_id:
-            # Verify it still exists using direct ID lookup
-            cover_letter_check = rr_client.get_resume(existing_id)
-            if not cover_letter_check:
-                # ID in cache but doesn't exist - clear it
-                existing_id = None
-
-    if existing_id and not overwrite:
-        logger.error(f"Cover letter already exists in Reactive Resume (ID: {existing_id})")
-        click.echo(
-            click.style(
-                "\n❌ Error: Cover letter already exists in Reactive Resume.",
-                fg="red",
-            )
-        )
-        click.echo(
-            click.style(
-                f"   Cover Letter ID: {existing_id}",
-                fg="yellow",
-            )
-        )
-        click.echo(
-            click.style(
-                "   Use --overwrite-resume to replace it.",
-                fg="yellow",
-            )
-        )
-        raise click.ClickException(
-            f"Cover letter already exists (ID: {existing_id}). Use --overwrite-resume to overwrite."
-        )
-
-    if existing_id and overwrite:
-        logger.warning(f"Deleting existing cover letter: {existing_id}")
-        rr_client.delete_resume(existing_id)
-        return None
-
-    return existing_id
