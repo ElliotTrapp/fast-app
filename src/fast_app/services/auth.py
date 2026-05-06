@@ -39,6 +39,7 @@ See: docs/adr/004-jwt-bcrypt-auth.md, docs/guide/auth-setup.md
 """
 
 import os
+from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Annotated
 
@@ -197,9 +198,20 @@ def is_auth_enabled(session: "Session") -> bool:
     return user is not None
 
 
+def _session_dependency() -> "Generator[Session, None, None]":
+    """FastAPI dependency that yields a database session.
+
+    Lazily imports to avoid requiring sqlmodel at module level
+    (sqlmodel is an optional [auth] dependency).
+    """
+    from ..db import get_session
+
+    yield from get_session()
+
+
 async def get_current_user(
     token: Annotated[str | None, Depends(oauth2_scheme)] = None,
-    session: "Session" = Depends(lambda: None),
+    session: "Session" = Depends(_session_dependency),
 ) -> "User | None":
     """FastAPI dependency that extracts and validates the current user from a JWT.
 
