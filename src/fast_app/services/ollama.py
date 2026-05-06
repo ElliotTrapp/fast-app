@@ -8,14 +8,10 @@ always use the direct Ollama SDK regardless of LangChain availability.
 
 import asyncio
 import json
-import re
-import time
-from functools import wraps
 from pathlib import Path
 
 import requests
 from ollama import Client
-from progress.spinner import Spinner
 
 from ..config import Config, OllamaConfig
 from ..log import logger
@@ -23,68 +19,10 @@ from ..models import CoverLetterContent, QuestionContent, ResumeContent
 from ..prompts.cover_letter import get_cover_letter_prompt
 from ..prompts.questions import get_questions_prompt
 from ..prompts.resume import get_resume_prompt
-
-
-def with_retry(
-    max_retries: int = 3,
-    initial_delay: float = 1.0,
-    backoff_factor: float = 2.0,
-):
-    """Decorator to retry Ollama API calls with exponential backoff."""
-
-    def decorator(func):
-        @wraps(func)
-        def wrapper(self, *args, **kwargs):
-            last_exception: Exception | None = None
-            delay = initial_delay
-
-            for attempt in range(max_retries + 1):
-                try:
-                    return func(self, *args, **kwargs)
-                except requests.RequestException as e:
-                    last_exception = e
-                    if attempt < max_retries:
-                        import click
-
-                        click.echo(
-                            click.style(
-                                (
-                                    f"  ⚠️  Ollama request failed "
-                                    f"(attempt {attempt + 1}/{max_retries + 1}): {e}"
-                                ),
-                                fg="yellow",
-                            )
-                        )
-                        click.echo(click.style(f"  ⏳ Retrying in {delay:.1f}s...", fg="yellow"))
-                        time.sleep(delay)
-                        delay *= backoff_factor
-                    else:
-                        raise RuntimeError(
-                            f"Ollama request failed after {max_retries + 1} attempts. "
-                            f"Last error: {e}\n\n"
-                            f"Suggestion: Ensure Ollama is running at {self.config.endpoint}\n"
-                            f"  Run: ollama serve\n"
-                            f"  Or check if the model '{self.config.model}' "
-                            f"is available: ollama list"
-                        ) from e
-                except Exception as e:
-                    raise e
-
-            raise last_exception
-
-        return wrapper
-
-    return decorator
-
-
-def _run_async(coro):
-    """Run async coroutine in sync context."""
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    return loop.run_until_complete(coro)
+from ..utils.async_helpers import run_async
+from ..utils.retry import with_retry
+from ..utils.spinner import SpinnerContextManager
+from ..utils.text import strip_markdown_json
 
 
 class OllamaService:
@@ -131,15 +69,6 @@ class OllamaService:
             # LangChain not installed or provider misconfigured —
             # fall back to direct Ollama SDK calls
             self._llm_service = None
-
-    def _strip_markdown_json(self, content: str) -> str:
-        """Strip markdown code blocks from LLM response if present."""
-        content = content.strip()
-        pattern = r"^```(?:json)?\s*\n?(.*?)\n?```$"
-        match = re.match(pattern, content, re.DOTALL)
-        if match:
-            return match.group(1).strip()
-        return content
 
     def check_connection(self) -> bool:
         """Check if Ollama endpoint is reachable."""
@@ -268,7 +197,7 @@ class OllamaService:
         )
 
         result = response.get("message", {}).get("content", "")
-        cleaned = self._strip_markdown_json(result)
+        cleaned = strip_markdown_json(result)
 
         logger.llm_response(len(cleaned))
 
@@ -301,23 +230,8 @@ class OllamaService:
         Raises:
             RuntimeError: If unable to connect to Ollama after retries
         """
-        spinner = Spinner("🤖 Generating questions ")
-
-        def spin():
-            """Background thread to animate spinner."""
-            import time
-
-            while not spinner_done.is_set():
-                spinner.next()
-                time.sleep(0.1)
-
-        import threading
-
-        spinner_done = threading.Event()
-        spinner_thread = threading.Thread(target=spin, daemon=True)
-        spinner_thread.start()
-
-        try:
+        spinner = SpinnerContextManager("🤖 Generating questions ")
+        with spinner:
             try:
                 if self._llm_service is not None:
                     result = self._llm_service.generate_questions(
@@ -326,12 +240,8 @@ class OllamaService:
                     return result
             except Exception:
                 pass
-            result = _run_async(self._generate_questions_async(job_data, profile_data))
+            result = run_async(self._generate_questions_async(job_data, profile_data))
             return result
-        finally:
-            spinner_done.set()
-            spinner_thread.join(timeout=0.5)
-            spinner.finish()
 
     async def _generate_resume_async(
         self,
@@ -366,7 +276,7 @@ class OllamaService:
         )
 
         result = response.get("message", {}).get("content", "")
-        cleaned = self._strip_markdown_json(result)
+        cleaned = strip_markdown_json(result)
 
         logger.llm_response(len(cleaned))
 
@@ -421,22 +331,7 @@ class OllamaService:
         Raises:
             RuntimeError: If LLM fails to generate valid cover letter after retries
         """
-        spinner = Spinner("✍️  Generating cover letter ")
-
-        def spin():
-            import time
-
-            while not spinner_done.is_set():
-                spinner.next()
-                time.sleep(0.1)
-
-        import threading
-
-        spinner_done = threading.Event()
-        spinner_thread = threading.Thread(target=spin, daemon=True)
-        spinner_thread.start()
-
-        try:
+        with SpinnerContextManager("✍️  Generating cover letter "):
             try:
                 if self._llm_service is not None:
                     result = self._llm_service.generate_cover_letter(
@@ -445,16 +340,12 @@ class OllamaService:
                     return result
             except Exception:
                 pass
-            result = _run_async(
+            result = run_async(
                 self._generate_cover_letter_async(
                     job_data, profile_data, questions, answers, output_path
                 )
             )
             return result
-        finally:
-            spinner_done.set()
-            spinner_thread.join(timeout=0.5)
-            spinner.finish()
 
     async def _generate_cover_letter_async(
         self,
@@ -487,7 +378,7 @@ class OllamaService:
         )
 
         result = response.get("message", {}).get("content", "")
-        cleaned = self._strip_markdown_json(result)
+        cleaned = strip_markdown_json(result)
 
         logger.llm_response(len(cleaned))
 
@@ -549,22 +440,7 @@ class OllamaService:
         Raises:
             RuntimeError: If LLM fails to generate valid resume after retries
         """
-        spinner = Spinner("📝 Generating resume ")
-
-        def spin():
-            import time
-
-            while not spinner_done.is_set():
-                spinner.next()
-                time.sleep(0.1)
-
-        import threading
-
-        spinner_done = threading.Event()
-        spinner_thread = threading.Thread(target=spin, daemon=True)
-        spinner_thread.start()
-
-        try:
+        with SpinnerContextManager("📝 Generating resume "):
             try:
                 if self._llm_service is not None:
                     result = self._llm_service.generate_resume(
@@ -573,11 +449,7 @@ class OllamaService:
                     return result
             except Exception:
                 pass
-            result = _run_async(
+            result = run_async(
                 self._generate_resume_async(job_data, profile_data, questions, answers, output_path)
             )
             return result
-        finally:
-            spinner_done.set()
-            spinner_thread.join(timeout=0.5)
-            spinner.finish()

@@ -15,6 +15,7 @@ from ..models.db_models import User
 from ..services.auth import get_current_user, is_auth_enabled
 from .auth_routes import router as auth_router
 from .background_tasks import process_job
+from .dependencies import resolve_user_id
 from .job_search_routes import router as job_search_router
 from .knowledge_routes import router as knowledge_router
 from .log_stream import log_broadcaster
@@ -26,17 +27,6 @@ current_task: asyncio.Task | None = None
 
 # Per-user task tracking: user_id -> asyncio.Task
 user_tasks: dict[int, asyncio.Task] = {}
-
-
-def _resolve_user_id(user: User | None) -> int:
-    """Resolve the effective user ID from the authenticated user.
-
-    In auth-disabled mode (user is None), returns the default user ID (1).
-    In auth-enabled mode, returns the authenticated user's ID.
-    """
-    if user is None:
-        return 1
-    return user.id
 
 
 @asynccontextmanager
@@ -268,7 +258,7 @@ async def health():
 @app.get("/api/status")
 async def get_status(user: User | None = Depends(get_current_user)):
     """Get current job status for the authenticated user."""
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
     sm = per_user_state.get_state(user_id)
     return sm.to_dict()
 
@@ -281,7 +271,7 @@ async def submit_job(request: dict[str, Any], user: User | None = Depends(get_cu
     - URL mode: {"url": "https://..."}
     - Text mode: {"title": "Job Title", "content": "Job description text..."}
     """
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
     sm = per_user_state.get_state(user_id)
 
     url = request.get("url", "")
@@ -331,7 +321,7 @@ async def submit_job(request: dict[str, Any], user: User | None = Depends(get_cu
 @app.get("/api/question")
 async def get_question(user: User | None = Depends(get_current_user)):
     """Get the current question."""
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
     sm = per_user_state.get_state(user_id)
 
     if sm.state.value != "waiting_questions":
@@ -347,7 +337,7 @@ async def get_question(user: User | None = Depends(get_current_user)):
 @app.post("/api/answer")
 async def submit_answer(request: dict[str, Any], user: User | None = Depends(get_current_user)):
     """Submit an answer to the current question."""
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
     sm = per_user_state.get_state(user_id)
 
     if sm.state.value != "waiting_questions":
@@ -376,7 +366,7 @@ async def submit_answer(request: dict[str, Any], user: User | None = Depends(get
 @app.post("/api/reset")
 async def reset_job(user: User | None = Depends(get_current_user)):
     """Reset the job state."""
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
     sm = per_user_state.get_state(user_id)
 
     # Cancel any running task for this user
