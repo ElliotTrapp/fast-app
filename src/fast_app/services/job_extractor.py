@@ -26,26 +26,12 @@ from typing import Any
 from urllib.parse import urlparse
 
 from ollama import Client
-from progress.spinner import Spinner
 
 from ..log import logger
 from ..models import JobData
-
-
-def _run_async(coro):
-    """Run async coroutine in sync context."""
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import concurrent.futures
-
-            with concurrent.futures.ThreadPoolExecutor() as executor:
-                future = executor.submit(asyncio.run, coro)
-                return future.result()
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-    return loop.run_until_complete(coro)
+from ..utils.async_helpers import run_async
+from ..utils.spinner import SpinnerContextManager
+from ..utils.text import strip_markdown_json
 
 
 def _is_workday_url(url: str) -> bool:
@@ -303,15 +289,6 @@ class JobExtractor:
         self.client = client
         self.model = model
 
-    def _strip_markdown_json(self, content: str) -> str:
-        """Strip markdown code blocks from LLM response if present."""
-        content = content.strip()
-        pattern = r"^```(?:json)?\s*\n?(.*?)\n?```$"
-        match = re.match(pattern, content, re.DOTALL)
-        if match:
-            return match.group(1).strip()
-        return content
-
     def _extract_job_data_from_content(self, content: str, url: str = "") -> dict[str, Any]:
         """Extract structured job data from text content using LLM.
 
@@ -381,7 +358,7 @@ Return valid JSON matching this schema:
         )
 
         result = response.get("message", {}).get("content", "")
-        cleaned = self._strip_markdown_json(result)
+        cleaned = strip_markdown_json(result)
 
         logger.llm_response(len(cleaned))
 
@@ -485,31 +462,13 @@ Return valid JSON matching this schema:
         Raises:
             RuntimeError: If all fetching strategies fail.
         """
-        spinner = Spinner("🔍 Extracting job data ")
-
-        def spin():
-            import time
-
-            while not spinner_done.is_set():
-                spinner.next()
-                time.sleep(0.1)
-
-        import threading
-
-        spinner_done = threading.Event()
-        spinner_thread = threading.Thread(target=spin, daemon=True)
-        spinner_thread.start()
-
-        try:
-            result = _run_async(self._extract_from_url_async(url))
-            return result
-        except Exception as e:
-            logger.error(f"Failed to extract job data: {e}")
-            raise RuntimeError(f"Failed to extract job data: {e}") from e
-        finally:
-            spinner_done.set()
-            spinner_thread.join(timeout=0.5)
-            spinner.finish()
+        with SpinnerContextManager("🔍 Extracting job data "):
+            try:
+                result = run_async(self._extract_from_url_async(url))
+                return result
+            except Exception as e:
+                logger.error(f"Failed to extract job data: {e}")
+                raise RuntimeError(f"Failed to extract job data: {e}") from e
 
     def extract_from_text(self, title: str, content: str, url: str = "") -> dict[str, Any]:
         """Extract job data from pasted text content.
@@ -528,28 +487,10 @@ Return valid JSON matching this schema:
         Returns:
             Dict with JobData fields populated from the text content.
         """
-        spinner = Spinner("🔍 Extracting job data from text ")
-
-        def spin():
-            import time
-
-            while not spinner_done.is_set():
-                spinner.next()
-                time.sleep(0.1)
-
-        import threading
-
-        spinner_done = threading.Event()
-        spinner_thread = threading.Thread(target=spin, daemon=True)
-        spinner_thread.start()
-
-        try:
-            result = _run_async(self._extract_from_text_async(title, content, url))
-            return result
-        except Exception as e:
-            logger.error(f"Failed to extract job data from text: {e}")
-            raise RuntimeError(f"Failed to extract job data from text: {e}") from e
-        finally:
-            spinner_done.set()
-            spinner_thread.join(timeout=0.5)
-            spinner.finish()
+        with SpinnerContextManager("🔍 Extracting job data from text "):
+            try:
+                result = run_async(self._extract_from_text_async(title, content, url))
+                return result
+            except Exception as e:
+                logger.error(f"Failed to extract job data from text: {e}")
+                raise RuntimeError(f"Failed to extract job data from text: {e}") from e
