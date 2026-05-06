@@ -27,7 +27,7 @@ def check_knowledge_deps():
 @pytest.fixture(autouse=True)
 def reset_secret():
     """Reset the JWT_SECRET module variable so auth is disabled."""
-    import fast_app.services.auth as auth_module
+    import fast_app.services.auth_core as auth_module
 
     original = auth_module.JWT_SECRET
     auth_module.JWT_SECRET = ""

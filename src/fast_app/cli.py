@@ -807,8 +807,9 @@ def status_command(config_path: str | None) -> None:
                     config.reactive_resume.endpoint, config.reactive_resume.api_key
                 )
                 if rr.test_connection():
-                    rr_status.append(                    f"✓ Reactive Resume connection "
-                    f"({config.reactive_resume.endpoint})")
+                    rr_status.append(
+                        f"✓ Reactive Resume connection ({config.reactive_resume.endpoint})"
+                    )
                     rr_status.append("  API key configured")
                 else:
                     rr_status.append("✗ Reactive Resume connection failed")
@@ -1128,7 +1129,7 @@ def _get_user_id(config_path: str | None) -> int:
     token = _load_token()
     if token:
         try:
-            from .services.auth import JWT_SECRET, decode_access_token
+            from .services.auth_core import JWT_SECRET, decode_access_token
 
             if JWT_SECRET:
                 payload = decode_access_token(token)

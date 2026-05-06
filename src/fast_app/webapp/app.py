@@ -134,7 +134,7 @@ async def auth_guard(request: Request, call_next):
 
     if token:
         try:
-            from ..services.auth import decode_access_token
+            from ..services.auth_core import decode_access_token
 
             payload = decode_access_token(token)
             user_id = int(payload.get("sub", 0))
@@ -153,7 +153,7 @@ def _is_auth_enabled_cached() -> bool:
     """Check if auth is enabled, caching the result for 60 seconds."""
     import time
 
-    from ..services.auth import JWT_SECRET
+    from ..services.auth_core import JWT_SECRET
 
     cache_key = JWT_SECRET or "no_secret"
     now = time.time()
