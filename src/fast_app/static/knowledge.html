@@ -40,8 +40,12 @@
 
         <!-- Search & Filter Bar -->
         <div class="knowledge-toolbar">
+            <label class="select-all-label">
+                <input type="checkbox" class="fact-checkbox" :checked="selectAll" @change="toggleSelectAll()">
+                <span>Select all</span>
+            </label>
             <div class="search-bar">
-                <input type="text" x-model="searchQuery" placeholder="Search facts..." @keydown.enter="loadFacts()" class="search-input">
+                <input type="text" x-model="searchQuery" placeholder="Search facts..." @keydown.enter="loadFacts()" @input="selectedFactIds = []; selectAll = false" class="search-input">
                 <button class="btn-primary" @click="loadFacts()">Search</button>
             </div>
             <div class="category-tabs">
@@ -53,6 +57,15 @@
             <button class="btn-secondary" @click="showAddForm = !showAddForm">
                 <span x-text="showAddForm ? 'Cancel' : '+ Add Fact'"></span>
             </button>
+        </div>
+
+        <!-- Bulk Action Bar -->
+        <div x-show="selectedFactIds.length > 0" x-transition class="bulk-action-bar">
+            <span class="selected-count" x-text="selectedCount() + ' selected'"></span>
+            <div class="bulk-action-buttons">
+                <button class="btn-danger btn-sm" @click="confirmBulkDelete()">🗑️ Delete Selected</button>
+                <button class="btn-secondary btn-sm" @click="selectedFactIds = []; selectAll = false">Cancel</button>
+            </div>
         </div>
 
         <!-- Add Fact Form -->
@@ -127,6 +140,7 @@
                     <template x-if="!(editingFact && editingFact.id === fact.id)">
                         <div class="fact-view">
                             <div class="fact-header">
+                                <input type="checkbox" class="fact-checkbox" :checked="isSelected(fact.id)" @change="toggleSelectFact(fact.id)">
                                 <span class="category-badge" :class="'badge-' + fact.category" x-text="fact.category"></span>
                                 <span class="fact-confidence" x-show="fact.confidence < 1">Confidence: <span x-text="(fact.confidence * 100).toFixed(0) + '%'"></span></span>
                                 <div class="fact-actions">
@@ -150,6 +164,17 @@
                 <h2>No Facts Yet</h2>
                 <p class="empty-desc">Facts are extracted from your Q&A sessions and used to generate better resumes. Add facts manually or they'll be created automatically.</p>
                 <button class="btn-primary" @click="showAddForm = true">Add Your First Fact</button>
+            </div>
+        </div>
+    <!-- Bulk Delete Confirmation Modal -->
+        <div x-show="showBulkDeleteConfirm" class="modal" @click.self="cancelBulkDelete()">
+            <div class="modal-content">
+                <h3>Delete Facts</h3>
+                <p>Are you sure you want to delete <strong x-text="selectedCount()"></strong> fact(s)? This cannot be undone.</p>
+                <div class="modal-buttons">
+                    <button class="btn-secondary" @click="cancelBulkDelete()">Cancel</button>
+                    <button class="btn-danger" @click="deleteSelected()">Delete</button>
+                </div>
             </div>
         </div>
     </div>

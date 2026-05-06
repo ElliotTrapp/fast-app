@@ -9,6 +9,9 @@ function knowledgeEditor() {
     showAddForm: false,
     loading: false,
     error: '',
+    selectedFactIds: [],
+    selectAll: false,
+    showBulkDeleteConfirm: false,
 
     async init() {
       await Promise.all([this.loadFacts(), this.loadCategories()]);
@@ -17,6 +20,8 @@ function knowledgeEditor() {
     async loadFacts() {
       this.loading = true;
       this.error = '';
+      this.selectedFactIds = [];
+      this.selectAll = false;
       try {
         let url = '/api/knowledge/facts';
         const params = new URLSearchParams();
@@ -136,6 +141,64 @@ function knowledgeEditor() {
 
     cancelEdit() {
       this.editingFact = null;
+    },
+
+    toggleSelectAll() {
+      if (this.selectAll) {
+        this.selectedFactIds = [];
+        this.selectAll = false;
+      } else {
+        this.selectedFactIds = this.facts.map(f => f.id);
+        this.selectAll = true;
+      }
+    },
+
+    toggleSelectFact(id) {
+      const idx = this.selectedFactIds.indexOf(id);
+      if (idx >= 0) {
+        this.selectedFactIds.splice(idx, 1);
+      } else {
+        this.selectedFactIds.push(id);
+      }
+      this.selectAll = this.facts.length > 0 && this.selectedFactIds.length === this.facts.length;
+    },
+
+    isSelected(id) {
+      return this.selectedFactIds.includes(id);
+    },
+
+    selectedCount() {
+      return this.selectedFactIds.length;
+    },
+
+    confirmBulkDelete() {
+      this.showBulkDeleteConfirm = true;
+    },
+
+    cancelBulkDelete() {
+      this.showBulkDeleteConfirm = false;
+    },
+
+    async deleteSelected() {
+      if (this.selectedFactIds.length === 0) return;
+      this.error = '';
+      try {
+        const response = await this.$store.auth.fetchWithAuth('/api/knowledge/facts', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: this.selectedFactIds }),
+        });
+        if (!response.ok && response.status !== 200) {
+          this.error = 'Failed to delete selected facts';
+          return;
+        }
+        this.selectedFactIds = [];
+        this.selectAll = false;
+        this.showBulkDeleteConfirm = false;
+        await Promise.all([this.loadFacts(), this.loadCategories()]);
+      } catch (e) {
+        this.error = 'Network error deleting facts';
+      }
     },
   };
 }

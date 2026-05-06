@@ -6,9 +6,11 @@ route handlers are thin wrappers that delegate to KnowledgeService.
 
 ## Endpoints
 
-- GET  /api/knowledge/search  — Semantic search across user's knowledge base
-- GET  /api/knowledge/facts    — List facts with optional category filter
-- DELETE /api/knowledge/facts  — Delete facts by IDs
+- GET    /api/knowledge/search              — Semantic search across user's knowledge base
+- GET    /api/knowledge/facts                — List facts with optional category filter
+- DELETE /api/knowledge/facts                — Delete facts by IDs
+- DELETE /api/knowledge/facts/all            — Delete ALL facts for the current user
+- POST   /api/knowledge/extract-from-profile — Extract facts from profile data via LLM
 
 ## Auth-Disabled Mode
 
@@ -32,6 +34,7 @@ from pydantic import BaseModel, Field
 
 from ..config import load_config
 from ..db import SessionDep
+from ..log import logger
 from ..models.db_models import User
 from ..models.knowledge import FactCreate, FactUpdate, KnowledgeSearchResult
 from ..services.auth import get_current_user
@@ -157,6 +160,122 @@ async def delete_facts(
             detail="Failed to delete facts — knowledge store may be unavailable",
         )
     return {"status": "deleted", "count": len(request.ids)}
+
+
+@router.delete("/facts/all")
+async def delete_all_facts(
+    session: SessionDep,
+    user: User | None = Depends(get_current_user),
+):
+    """Delete ALL facts in the user's knowledge collection.
+
+    Used when a user imports a new profile and wants to start fresh
+    with their knowledge base. This operation is irreversible.
+
+    Args:
+        user: Current authenticated user (None if auth disabled).
+        session: Database session from dependency injection.
+
+    Returns:
+        Dict with status and count of deleted facts.
+
+    Raises:
+        HTTPException: 503 if ChromaDB is unavailable.
+    """
+    user_id = _resolve_user_id(user)
+    try:
+        service = _get_service(user_id)
+    except ImportError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Knowledge features unavailable — ChromaDB not installed. "
+            "Install with: pip install -e '.[knowledge]'",
+        )
+
+    count = service.delete_all_facts()
+    return {"status": "deleted", "count": count}
+
+
+class ExtractFromProfileRequest(BaseModel):
+    """Request body for extracting facts from profile data."""
+
+    profile_data: dict = Field(
+        ...,
+        description="Full profile JSON data (same format as stored in profile_data column)",
+    )
+
+
+@router.post("/extract-from-profile")
+async def extract_from_profile(
+    request: ExtractFromProfileRequest,
+    session: SessionDep,
+    user: User | None = Depends(get_current_user),
+):
+    """Extract facts from profile data using LLM and store in knowledge base.
+
+    This is the webapp equivalent of the CLI's `--extract-facts` flag on
+    `profile import`. It takes profile data, runs fact extraction via LLM,
+    and stores the extracted facts in the user's ChromaDB collection.
+
+    Args:
+        request: Request body containing profile_data dict.
+        user: Current authenticated user (None if auth disabled).
+        session: Database session from dependency injection.
+
+    Returns:
+        Dict with status, fact_count, and summary of extracted facts.
+
+    Raises:
+        HTTPException: 503 if LLM or ChromaDB dependencies are unavailable.
+        HTTPException: 500 if fact extraction fails.
+    """
+    user_id = _resolve_user_id(user)
+
+    try:
+        from ..services.fact_extractor import FactExtractor
+        from ..services.llm_service import LLMService
+    except ImportError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="LLM dependencies not installed. "
+            "Install with: pip install -e '.[llm,knowledge]'",
+        )
+
+    try:
+        config = load_config()
+        llm_service = LLMService(config)
+        extractor = FactExtractor(llm_service)
+        result = extractor.extract_facts_from_profile(request.profile_data)
+    except Exception as e:
+        logger.error(f"Fact extraction from profile failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Fact extraction failed: {e}",
+        )
+
+    try:
+        service = _get_service(user_id)
+    except ImportError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Knowledge features unavailable — ChromaDB not installed. "
+            "Install with: pip install -e '.[knowledge]'",
+        )
+
+    if result.facts:
+        stored_ids = service.store_facts(
+            result.facts,
+            source="profile_import",
+        )
+        logger.info(f"Stored {len(stored_ids)} facts from profile extraction for user {user_id}")
+    else:
+        logger.info(f"No extractable facts found in profile for user {user_id}")
+
+    return {
+        "status": "extracted",
+        "fact_count": len(result.facts),
+        "summary": result.summary,
+    }
 
 
 @router.post("/facts", status_code=status.HTTP_201_CREATED)

@@ -91,6 +91,32 @@
                 </div>
             </div>
 
+            <!-- Import Confirmation Modal -->
+            <div x-show="showImportConfirm" class="modal" @click.self="cancelImport()">
+                <div class="modal-content">
+                    <h3>Import Profile</h3>
+                    <p>Importing this profile will <strong>replace your current profile data</strong>.</p>
+                    <p>Your existing knowledge facts will be <strong>deleted and re-extracted</strong> from the new profile.</p>
+                    <div class="form-group" style="margin-top: 16px;">
+                        <label class="checkbox-label">
+                            <input type="checkbox" x-model="extractFactsOnImport">
+                            Extract knowledge facts from this profile
+                        </label>
+                    </div>
+                    <p x-show="extractFactsOnImport" class="info-text">
+                        This will delete your existing facts and run AI analysis on the imported profile to create new facts. This may take a moment.
+                    </p>
+                    <div class="modal-buttons">
+                        <button class="btn-secondary" @click="cancelImport()">Cancel</button>
+                        <button class="btn-primary" @click="confirmImport()" :disabled="importingProfile">
+                            <span x-show="!importingProfile && !extractingFacts">Import Profile</span>
+                            <span x-show="importingProfile && !extractingFacts">Importing...</span>
+                            <span x-show="extractingFacts">Extracting facts...</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Delete Confirmation Modal -->
             <div x-show="showDeleteConfirm" class="modal" @click.self="showDeleteConfirm = false">
                 <div class="modal-content">
@@ -499,6 +525,13 @@
 
         <!-- Error State -->
         <div x-show="error" x-transition class="error-message" x-text="error"></div>
+
+        <!-- Fact Extraction Loading Overlay -->
+        <div x-show="extractingFacts" class="loading-overlay">
+            <div class="spinner"></div>
+            <p>Extracting knowledge facts from your profile...</p>
+            <p class="loading-subtext">This may take a moment. The AI is analyzing your profile data.</p>
+        </div>
     </div>
 
     <!-- Hidden file input for import -->

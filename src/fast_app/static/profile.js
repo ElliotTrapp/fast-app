@@ -31,6 +31,11 @@ function profileEditor() {
     newProfileName: '',
     showNewProfileModal: false,
     showDeleteConfirm: false,
+    showImportConfirm: false,
+    pendingImportData: null,
+    extractFactsOnImport: true,
+    importingProfile: false,
+    extractingFacts: false,
     loading: true,
     error: '',
     saveStatus: '',
@@ -538,18 +543,32 @@ function profileEditor() {
       try {
         const text = await file.text();
         const profileData = JSON.parse(text);
-        const name = profileData.name || file.name.replace('.json', '');
+        this.pendingImportData = profileData;
+        this.showImportConfirm = true;
+      } catch (e) {
+        this.error = 'Invalid JSON file';
+      }
+      event.target.value = '';
+    },
+
+    async confirmImport() {
+      if (!this.pendingImportData) return;
+      this.importingProfile = true;
+      this.error = '';
+      try {
+        const name = this.pendingImportData.name || 'Imported Profile';
         const response = await this.$store.auth.fetchWithAuth('/api/profiles/import', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name: name,
-            profile_data: profileData,
+            profile_data: this.pendingImportData,
             is_default: this.profiles.length === 0,
           }),
         });
         if (!response.ok) {
           this.error = 'Failed to import profile';
+          this.importingProfile = false;
           return;
         }
         await this.loadProfiles();
@@ -559,10 +578,37 @@ function profileEditor() {
           this.activeProfileId = profiles[profiles.length - 1].id;
           await this.loadActiveProfile();
         }
+
+        if (this.extractFactsOnImport) {
+          this.extractingFacts = true;
+          try {
+            await this.$store.auth.fetchWithAuth('/api/knowledge/facts/all', { method: 'DELETE' });
+            await this.$store.auth.fetchWithAuth('/api/knowledge/extract-from-profile', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ profile_data: this.pendingImportData }),
+            });
+          } catch (e) {
+            this.error = 'Profile imported, but fact extraction failed';
+          }
+        }
+
+        this.showImportConfirm = false;
+        this.pendingImportData = null;
+        this.extractFactsOnImport = true;
+        this.importingProfile = false;
+        this.extractingFacts = false;
       } catch (e) {
-        this.error = 'Invalid JSON file';
+        this.error = 'Network error importing profile';
+        this.importingProfile = false;
+        this.extractingFacts = false;
       }
-      event.target.value = '';
+    },
+
+    cancelImport() {
+      this.pendingImportData = null;
+      this.showImportConfirm = false;
+      this.extractFactsOnImport = true;
     },
 
     async exportProfile() {

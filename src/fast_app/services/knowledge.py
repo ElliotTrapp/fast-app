@@ -484,6 +484,36 @@ class KnowledgeService:
             "created_at": now,
         }
 
+    def delete_all_facts(self) -> int:
+        """Delete all facts in the user's knowledge collection.
+
+        Removes every document from the user's ChromaDB collection.
+        Used when a user wants to start fresh (e.g., after importing a new profile).
+
+        Args:
+            None — operates on the collection identified by self._collection_name.
+
+        Returns:
+            The number of facts that were deleted. Returns 0 if the collection
+            is empty or ChromaDB is unavailable.
+        """
+        collection = self._get_or_create_collection()
+        if collection is None:
+            logger.warning("ChromaDB unavailable; no facts deleted")
+            return 0
+
+        count = collection.count()
+        if count == 0:
+            return 0
+
+        results = collection.get()
+        ids = results["ids"]
+        if ids:
+            collection.delete(ids=ids)
+            logger.info(f"Deleted {len(ids)} facts from {self._collection_name}")
+
+        return len(ids)
+
     def get_categories(self, user_id: int) -> list[str]:
         """Get unique categories from the user's knowledge collection.
 
