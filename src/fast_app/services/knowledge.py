@@ -211,7 +211,8 @@ class KnowledgeService:
         """Store extracted facts in the user's knowledge collection.
 
         Each fact is embedded and stored with rich metadata for later retrieval
-        and filtering.
+        and filtering. Facts with duplicate content (case-insensitive exact
+        match) are skipped to prevent redundant entries.
 
         Args:
             facts: List of ExtractedFact objects from the fact extraction pipeline.
@@ -219,18 +220,30 @@ class KnowledgeService:
             source: Source of the facts (e.g., "qa_session", "manual_entry").
 
         Returns:
-            List of fact IDs that were stored.
+            List of fact IDs that were stored (excludes duplicates).
         """
         collection = self._get_or_create_collection()
         if collection is None:
             logger.warning("ChromaDB unavailable; facts not stored")
             return []
 
+        existing_contents = set()
+        if collection.count() > 0:
+            existing = collection.get(include=["documents"])
+            existing_contents = {doc.lower().strip() for doc in existing["documents"]}
+
         ids = []
         documents = []
         metadatas = []
+        skipped = 0
 
         for fact in facts:
+            normalized = fact.content.lower().strip()
+            if normalized in existing_contents:
+                skipped += 1
+                continue
+            existing_contents.add(normalized)
+
             fact_id = str(uuid.uuid4())
             ids.append(fact_id)
             documents.append(fact.content)
@@ -245,8 +258,11 @@ class KnowledgeService:
                 }
             )
 
-        collection.add(ids=ids, documents=documents, metadatas=metadatas)
-        logger.info(f"Stored {len(facts)} facts in {self._collection_name}")
+        if ids:
+            collection.add(ids=ids, documents=documents, metadatas=metadatas)
+        logger.info(
+            f"Stored {len(ids)} facts in {self._collection_name} (skipped {skipped} duplicates)"
+        )
 
         return ids
 
@@ -370,17 +386,31 @@ class KnowledgeService:
     def add_fact(self, user_id: int, fact: FactCreate) -> dict[str, Any]:
         """Add a single fact to the user's knowledge collection.
 
+        If a fact with identical content (case-insensitive) already exists,
+        the duplicate is skipped and an empty dict is returned.
+
         Args:
             user_id: The user ID (used for collection isolation).
             fact: FactCreate schema with content, category, source, job_url, confidence.
 
         Returns:
             Dict with id, content, category, source, job_url, confidence, created_at.
+            Empty dict if ChromaDB is unavailable or fact is a duplicate.
         """
         collection = self._get_or_create_collection()
         if collection is None:
             logger.warning("ChromaDB unavailable; fact not added")
             return {}
+
+        normalized = fact.content.lower().strip()
+        if collection.count() > 0:
+            existing = collection.get(include=["documents"])
+            existing_contents = {doc.lower().strip() for doc in existing["documents"]}
+            if normalized in existing_contents:
+                logger.info(
+                    f"Skipping duplicate fact in {self._collection_name}: {fact.content[:50]}"
+                )
+                return {"duplicate": True, "content": fact.content}
 
         fact_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()

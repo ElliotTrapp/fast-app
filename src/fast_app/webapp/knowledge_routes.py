@@ -286,6 +286,9 @@ async def add_fact(
 ):
     """Add a new fact to the user's knowledge collection.
 
+    If a fact with identical content (case-insensitive) already exists,
+    returns 409 Conflict instead of creating a duplicate.
+
     Args:
         fact: FactCreate schema with content, category, source, job_url, confidence.
         user: Current authenticated user (None if auth disabled).
@@ -293,6 +296,10 @@ async def add_fact(
 
     Returns:
         Dict with id, content, category, source, job_url, confidence, created_at.
+
+    Raises:
+        HTTPException: 409 if a fact with identical content already exists.
+        HTTPException: 500 if ChromaDB is unavailable.
     """
     user_id = _resolve_user_id(user)
     service = _get_service(user_id)
@@ -301,6 +308,11 @@ async def add_fact(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to add fact — knowledge store may be unavailable",
+        )
+    if result.get("duplicate"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A fact with this content already exists: {result.get('content', '')[:80]}",
         )
     return result
 

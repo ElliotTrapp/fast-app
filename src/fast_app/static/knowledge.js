@@ -78,6 +78,10 @@ function knowledgeEditor() {
             category: this.newFact.category,
           }),
         });
+        if (response.status === 409) {
+          this.error = 'A fact with this content already exists';
+          return;
+        }
         if (!response.ok) {
           this.error = 'Failed to add fact';
           return;

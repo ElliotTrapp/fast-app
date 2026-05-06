@@ -305,18 +305,18 @@
 }
 
 .bulk-action-bar {
-    position: sticky;
+    position: fixed;
     bottom: 0;
+    left: 0;
+    right: 0;
     background: white;
-    border: 1px solid #667eea;
-    border-radius: 8px;
-    padding: 12px 16px;
+    border-top: 2px solid #667eea;
+    padding: 12px 24px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    box-shadow: 0 -2px 12px rgba(102, 126, 234, 0.15);
-    margin-bottom: 12px;
-    z-index: 10;
+    box-shadow: 0 -2px 12px rgba(102, 126, 234, 0.2);
+    z-index: 100;
 }
 
 .selected-count {
