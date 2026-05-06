@@ -170,3 +170,21 @@ class ProfileRead(SQLModel):
     is_default: bool
     created_at: datetime
     updated_at: datetime
+
+
+class ProfilePatch(SQLModel):
+    """Schema for partial profile updates (PATCH).
+
+    All fields are optional — only provided fields will be merged
+    into the existing profile. profile_data is deep-merged with the
+    existing data, so nested keys can be updated independently.
+
+    Attributes:
+        name: New profile name (optional)
+        profile_data: Partial profile data to deep-merge (optional)
+        is_default: Whether to set this as the default profile (optional)
+    """
+
+    name: str | None = None
+    profile_data: dict | None = None
+    is_default: bool | None = None

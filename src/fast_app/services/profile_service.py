@@ -38,7 +38,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from sqlmodel import Session
 
-from ..models.db_models import ProfileCreate, ProfileRead, UserProfile
+from ..models.db_models import ProfileCreate, ProfilePatch, ProfileRead, UserProfile
 
 
 class ProfileService:
@@ -136,6 +136,47 @@ class ProfileService:
         profile.name = data.name
         profile.profile_data = json.dumps(data.profile_data)
         profile.is_default = data.is_default
+        session.add(profile)
+        session.commit()
+        session.refresh(profile)
+        return profile
+
+    def patch_profile(
+        self, profile_id: int, user_id: int, data: ProfilePatch, session: Session
+    ) -> UserProfile | None:
+        """Partially update a profile with deep-merge of profile_data.
+
+        Only fields present in the PatchData will be updated. For
+        profile_data, the provided dict is deep-merged into the existing
+        data, so nested keys can be updated independently without losing
+        other nested fields.
+
+        Args:
+            profile_id: The profile's database ID.
+            user_id: The owner's user ID (for security check).
+            data: ProfilePatch schema with partial updates.
+            session: Database session.
+
+        Returns:
+            Updated UserProfile if found and owned, None otherwise.
+        """
+        profile = self.get_profile(profile_id, user_id, session)
+        if profile is None:
+            return None
+
+        if data.name is not None:
+            profile.name = data.name
+
+        if data.profile_data is not None:
+            existing_data = json.loads(profile.profile_data)
+            merged_data = self._deep_merge(existing_data, data.profile_data)
+            profile.profile_data = json.dumps(merged_data)
+
+        if data.is_default is not None:
+            if data.is_default:
+                self._unset_default(user_id, session)
+            profile.is_default = data.is_default
+
         session.add(profile)
         session.commit()
         session.refresh(profile)
@@ -255,3 +296,25 @@ class ProfileService:
             profile.is_default = False
             session.add(profile)
         session.commit()
+
+    @staticmethod
+    def _deep_merge(base: dict, override: dict) -> dict:
+        """Deep-merge override dict into base dict.
+
+        For dict values, recursively merges. For all other values
+        (including lists), the override replaces the base value.
+
+        Args:
+            base: The existing dict to merge into.
+            override: The partial dict whose values take precedence.
+
+        Returns:
+            A new dict with merged values.
+        """
+        result = base.copy()
+        for key, value in override.items():
+            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                result[key] = ProfileService._deep_merge(result[key], value)
+            else:
+                result[key] = value
+        return result

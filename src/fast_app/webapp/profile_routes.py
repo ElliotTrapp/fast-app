@@ -29,7 +29,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from ..db import SessionDep
-from ..models.db_models import ProfileCreate, ProfileRead, User, UserProfile
+from ..models.db_models import ProfileCreate, ProfilePatch, ProfileRead, User, UserProfile
 from ..services.auth import get_current_user
 from ..services.profile_service import ProfileService
 
@@ -229,6 +229,41 @@ async def update_profile(
     """
     user_id = _resolve_user_id(user)
     profile = _service.update_profile(profile_id, user_id, data, session)
+    if profile is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Profile not found",
+        )
+    return _to_profile_read(profile)
+
+
+@router.patch("/{profile_id}", response_model=ProfileRead)
+async def patch_profile(
+    profile_id: int,
+    data: ProfilePatch,
+    session: SessionDep,
+    user: User | None = Depends(get_current_user),
+):
+    """Partially update a profile (owner check enforced).
+
+    Only fields present in the request body will be updated. For
+    profile_data, the provided dict is deep-merged into the existing
+    data, so nested keys can be updated independently.
+
+    Args:
+        profile_id: The profile's database ID.
+        data: ProfilePatch schema with partial updates.
+        user: Current authenticated user (None if auth disabled).
+        session: Database session from dependency injection.
+
+    Returns:
+        ProfileRead schema for the updated profile.
+
+    Raises:
+        HTTPException: 404 if profile not found or not owned by user.
+    """
+    user_id = _resolve_user_id(user)
+    profile = _service.patch_profile(profile_id, user_id, data, session)
     if profile is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

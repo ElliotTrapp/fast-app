@@ -203,6 +203,18 @@ async def login_page():
     )
 
 
+@app.get("/profile", response_class=HTMLResponse)
+async def profile_page():
+    """Serve the profile management page."""
+    profile_path = static_dir / "profile.html"
+    if profile_path.exists():
+        return HTMLResponse(content=profile_path.read_text(), status_code=200)
+    return HTMLResponse(
+        content="<html><body><h1>Profile page not found</h1></body></html>",
+        status_code=404,
+    )
+
+
 @app.get("/", response_class=HTMLResponse)
 async def root():
     """Serve the main HTML page."""
