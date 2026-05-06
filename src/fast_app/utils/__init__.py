@@ -9,10 +9,9 @@ from .profile import (
     load_base_cover_letter,
     load_base_resume,
     load_profile,
-    sanitize_name,
 )
 from .spinner import SpinnerContextManager
-from .text import strip_markdown_json
+from .text import sanitize_name, strip_markdown_json
 
 __all__ = [
     "sanitize_name",

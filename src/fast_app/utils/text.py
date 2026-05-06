@@ -1,6 +1,26 @@
-"""Text processing utilities for LLM response cleanup."""
+"""Text processing utilities for LLM response cleanup and string sanitization."""
 
 import re
+
+
+def sanitize_name(name: str) -> str:
+    """Sanitize company or job title for use in paths.
+
+    Removes commas, special characters, and extra spaces.
+
+    Args:
+        name: Raw name string
+
+    Returns:
+        Sanitized name safe for file paths
+    """
+    # Remove commas
+    name = name.replace(",", "")
+    # Remove special characters except spaces and hyphens
+    name = "".join(c for c in name if c.isalnum() or c in " -")
+    # Replace multiple spaces with single space
+    name = re.sub(r"\s+", " ", name)
+    return name.strip()
 
 
 def strip_markdown_json(content: str) -> str:
