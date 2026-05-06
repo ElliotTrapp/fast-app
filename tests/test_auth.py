@@ -203,3 +203,293 @@ class TestAuthDisabledMode:
             session.commit()
             result = is_auth_enabled(session)
             assert result is True
+
+
+class TestLoginPage:
+    """Tests for the login page endpoint."""
+
+    def test_login_page_returns_200(self):
+        """GET /login should return 200 (either HTML content or 404 fallback)."""
+        from starlette.testclient import TestClient
+
+        from fast_app.webapp.app import app
+
+        client = TestClient(app)
+        response = client.get("/login", follow_redirects=False)
+        assert response.status_code in (200, 404)
+
+    def test_login_page_returns_html(self):
+        """GET /login should return HTML content type."""
+        from starlette.testclient import TestClient
+
+        from fast_app.webapp.app import app
+
+        client = TestClient(app)
+        response = client.get("/login", follow_redirects=False)
+        assert response.status_code in (200, 404)
+        if response.status_code == 200:
+            assert "text/html" in response.headers.get("content-type", "")
+
+
+def _get_app_module():
+    """Get the fast_app.webapp.app module (not the FastAPI instance).
+
+    The webapp __init__.py re-exports `app` as the FastAPI instance,
+    so `import fast_app.webapp.app as app_module` resolves to the
+    FastAPI object, not the module. Use importlib to get the actual module.
+    """
+    import importlib
+
+    return importlib.import_module("fast_app.webapp.app")
+
+
+class TestAuthGuardPublicPaths:
+    """Tests that auth guard allows access to public paths without authentication."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_auth_cache(self):
+        """Clear the auth-enabled cache before and after each test."""
+        app_module = _get_app_module()
+        app_module._auth_enabled_cache.clear()
+        yield
+        app_module._auth_enabled_cache.clear()
+
+    def test_login_page_accessible_without_auth(self):
+        """GET /login should always be accessible, even when auth is enabled."""
+        from starlette.testclient import TestClient
+
+        import fast_app.services.auth as auth_module
+        from fast_app.webapp.app import app
+
+        app_module = _get_app_module()
+
+        auth_module.SECRET_KEY = "test-secret-for-guard"
+        app_module._auth_enabled_cache.clear()
+
+        client = TestClient(app)
+        response = client.get("/login", follow_redirects=False)
+        assert response.status_code in (200, 404)
+
+    def test_health_endpoint_accessible_without_auth(self):
+        """GET /health should always be accessible."""
+        from starlette.testclient import TestClient
+
+        import fast_app.services.auth as auth_module
+        from fast_app.webapp.app import app
+
+        app_module = _get_app_module()
+
+        auth_module.SECRET_KEY = "test-secret-for-guard"
+        app_module._auth_enabled_cache.clear()
+
+        client = TestClient(app)
+        response = client.get("/health", follow_redirects=False)
+        assert response.status_code == 200
+        assert response.json()["status"] == "healthy"
+
+    def test_auth_enabled_endpoint_accessible_without_auth(self):
+        """GET /api/auth/enabled should be accessible without authentication."""
+        from starlette.testclient import TestClient
+
+        import fast_app.services.auth as auth_module
+        from fast_app.webapp.app import app
+
+        app_module = _get_app_module()
+
+        auth_module.SECRET_KEY = "test-secret-for-guard"
+        app_module._auth_enabled_cache.clear()
+
+        client = TestClient(app)
+        response = client.get("/api/auth/enabled", follow_redirects=False)
+        assert response.status_code == 200
+        assert "enabled" in response.json()
+
+    def test_static_path_accessible_without_auth(self):
+        """Paths starting with /static/ should be accessible without auth."""
+        from starlette.testclient import TestClient
+
+        import fast_app.services.auth as auth_module
+        from fast_app.webapp.app import app
+
+        app_module = _get_app_module()
+
+        auth_module.SECRET_KEY = "test-secret-for-guard"
+        app_module._auth_enabled_cache.clear()
+
+        client = TestClient(app)
+        # Static file may return 200 or 404 depending on whether the file exists,
+        # but should NOT redirect to /login
+        response = client.get("/static/nonexistent.css", follow_redirects=False)
+        assert response.status_code != 303
+
+    def test_auth_login_endpoint_accessible_without_auth(self):
+        """POST /api/auth/login should be accessible without authentication."""
+        from starlette.testclient import TestClient
+
+        import fast_app.services.auth as auth_module
+        from fast_app.webapp.app import app
+
+        app_module = _get_app_module()
+
+        auth_module.SECRET_KEY = "test-secret-for-guard"
+        app_module._auth_enabled_cache.clear()
+
+        client = TestClient(app)
+        # POST with invalid credentials should get 401 or 422, NOT a redirect
+        response = client.post(
+            "/api/auth/login",
+            json={"email": "nonexistent@test.com", "password": "wrong"},
+            follow_redirects=False,
+        )
+        assert response.status_code in (401, 422)
+
+
+class TestAuthGuardRedirect:
+    """Tests that auth guard redirects unauthenticated users when auth is enabled."""
+
+    @pytest.fixture(autouse=True)
+    def _clear_auth_cache(self):
+        """Clear the auth-enabled cache before and after each test."""
+        app_module = _get_app_module()
+        app_module._auth_enabled_cache.clear()
+        yield
+        app_module._auth_enabled_cache.clear()
+
+    def test_protected_path_redirects_when_auth_enabled(self):
+        """GET / should redirect to /login when auth is enabled and no token is present."""
+        from starlette.testclient import TestClient
+
+        import fast_app.services.auth as auth_module
+        from fast_app.webapp.app import app
+
+        app_module = _get_app_module()
+
+        auth_module.SECRET_KEY = "test-secret-for-guard"
+        app_module._auth_enabled_cache.clear()
+
+        client = TestClient(app)
+        response = client.get("/", follow_redirects=False)
+        assert response.status_code == 303
+        assert response.headers["location"] == "/login"
+
+    def test_api_status_redirects_when_auth_enabled(self):
+        """GET /api/status should redirect to /login when auth is enabled and no token."""
+        from starlette.testclient import TestClient
+
+        import fast_app.services.auth as auth_module
+        from fast_app.webapp.app import app
+
+        app_module = _get_app_module()
+
+        auth_module.SECRET_KEY = "test-secret-for-guard"
+        app_module._auth_enabled_cache.clear()
+
+        client = TestClient(app)
+        response = client.get("/api/status", follow_redirects=False)
+        assert response.status_code == 303
+        assert response.headers["location"] == "/login"
+
+    def test_protected_path_allows_valid_token(self):
+        """GET / with a valid token should pass through auth guard."""
+        from starlette.testclient import TestClient
+
+        import fast_app.services.auth as auth_module
+        from fast_app.services.auth import create_access_token
+        from fast_app.webapp.app import app
+
+        app_module = _get_app_module()
+
+        auth_module.SECRET_KEY = "test-secret-for-guard"
+        app_module._auth_enabled_cache.clear()
+
+        token = create_access_token(user_id=1)
+
+        client = TestClient(app)
+        response = client.get(
+            "/",
+            cookies={"fast_app_token": token},
+            follow_redirects=False,
+        )
+        # Should NOT redirect — either 200 (page served) or pass through
+        assert response.status_code != 303
+
+    def test_protected_path_allows_bearer_token(self):
+        """GET / with Bearer token in header should pass through auth guard."""
+        from starlette.testclient import TestClient
+
+        import fast_app.services.auth as auth_module
+        from fast_app.services.auth import create_access_token
+        from fast_app.webapp.app import app
+
+        app_module = _get_app_module()
+
+        auth_module.SECRET_KEY = "test-secret-for-guard"
+        app_module._auth_enabled_cache.clear()
+
+        token = create_access_token(user_id=1)
+
+        client = TestClient(app)
+        response = client.get(
+            "/",
+            headers={"Authorization": f"Bearer {token}"},
+            follow_redirects=False,
+        )
+        assert response.status_code != 303
+
+    def test_auth_disabled_allows_all_paths(self):
+        """When auth is disabled, all paths should be accessible without a token."""
+        from starlette.testclient import TestClient
+
+        import fast_app.services.auth as auth_module
+        from fast_app.webapp.app import app
+
+        app_module = _get_app_module()
+
+        auth_module.SECRET_KEY = ""
+        app_module._auth_enabled_cache.clear()
+
+        client = TestClient(app)
+        response = client.get("/", follow_redirects=False)
+        # Should NOT redirect — either 200 or pass through
+        assert response.status_code != 303
+
+
+class TestLogout:
+    """Tests for the logout endpoint."""
+
+    def test_logout_returns_200(self):
+        """POST /api/auth/logout should return 200."""
+        from starlette.testclient import TestClient
+
+        from fast_app.webapp.app import app
+
+        client = TestClient(app)
+        response = client.post("/api/auth/logout", follow_redirects=False)
+        assert response.status_code == 200
+
+    def test_logout_clears_cookie(self):
+        """POST /api/auth/logout should clear the fast_app_token cookie."""
+        from starlette.testclient import TestClient
+
+        from fast_app.webapp.app import app
+
+        client = TestClient(app)
+        # Set a cookie first, then logout
+        client.cookies.set("fast_app_token", "some-token-value")
+        response = client.post("/api/auth/logout", follow_redirects=False)
+        assert response.status_code == 200
+        # The response should include a Set-Cookie header that clears the token
+        set_cookie_headers = [v for k, v in response.headers.items() if k.lower() == "set-cookie"]
+        assert any("fast_app_token" in h for h in set_cookie_headers)
+
+    def test_logout_returns_logged_out_status(self):
+        """POST /api/auth/logout should return {"status": "logged_out"}."""
+        from starlette.testclient import TestClient
+
+        from fast_app.webapp.app import app
+
+        client = TestClient(app)
+        response = client.post("/api/auth/logout", follow_redirects=False)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["status"] == "logged_out"

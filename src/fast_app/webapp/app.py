@@ -5,19 +5,36 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi import Depends, FastAPI, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from ..db import init_db
+from ..models.db_models import User
+from ..services.auth import get_current_user, is_auth_enabled
 from .auth_routes import router as auth_router
 from .background_tasks import process_job
 from .knowledge_routes import router as knowledge_router
 from .log_stream import log_broadcaster
+from .per_user_state import per_user_state
 from .profile_routes import router as profile_router
 from .state import state_manager
 
 current_task: asyncio.Task | None = None
+
+# Per-user task tracking: user_id -> asyncio.Task
+user_tasks: dict[int, asyncio.Task] = {}
+
+
+def _resolve_user_id(user: User | None) -> int:
+    """Resolve the effective user ID from the authenticated user.
+
+    In auth-disabled mode (user is None), returns the default user ID (1).
+    In auth-enabled mode, returns the authenticated user's ID.
+    """
+    if user is None:
+        return 1
+    return user.id
 
 
 @asynccontextmanager
@@ -35,6 +52,9 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    for task in user_tasks.values():
+        if task and not task.done():
+            task.cancel()
     if current_task and not current_task.done():
         current_task.cancel()
 
@@ -69,7 +89,8 @@ class ConnectionManager:
         log_broadcaster.add_client(websocket)
 
     def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
         log_broadcaster.remove_client(websocket)
 
     async def broadcast(self, message: dict):
@@ -86,6 +107,100 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
+
+
+async def auth_guard(request: Request, call_next):
+    """Middleware that redirects unauthenticated users to /login when auth is enabled.
+
+    Skips auth check for:
+    - /login (the login page itself)
+    - /static/* (static assets)
+    - /api/auth/* (auth endpoints)
+    - /health (health check)
+    - /ws (WebSocket)
+    """
+    path = request.url.path
+
+    public_paths = ["/login", "/health", "/ws"]
+    public_prefixes = ["/static/", "/api/auth/"]
+
+    if path in public_paths or any(path.startswith(p) for p in public_prefixes):
+        return await call_next(request)
+
+    auth_enabled = _is_auth_enabled_cached()
+
+    if not auth_enabled:
+        return await call_next(request)
+
+    token = request.cookies.get("fast_app_token")
+    if not token:
+        auth_header = request.headers.get("authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+
+    if token:
+        try:
+            from ..services.auth import decode_access_token
+
+            payload = decode_access_token(token)
+            user_id = int(payload.get("sub", 0))
+            if user_id > 0:
+                return await call_next(request)
+        except (ValueError, Exception):
+            pass
+
+    return RedirectResponse(url="/login", status_code=303)
+
+
+_auth_enabled_cache: dict[str, bool] = {}
+
+
+def _is_auth_enabled_cached() -> bool:
+    """Check if auth is enabled, caching the result for 60 seconds."""
+    import time
+
+    from ..services.auth import SECRET_KEY
+
+    cache_key = SECRET_KEY or "no_secret"
+    now = time.time()
+    cached = _auth_enabled_cache.get(cache_key)
+    if cached is not None:
+        cached_time, cached_value = _auth_enabled_cache[cache_key]
+        if now - cached_time < 60:
+            return cached_value
+
+    if SECRET_KEY:
+        _auth_enabled_cache[cache_key] = (now, True)
+        return True
+
+    from sqlmodel import Session
+
+    from ..db import get_engine
+
+    try:
+        engine = get_engine()
+        with Session(engine) as session:
+            result = is_auth_enabled(session)
+    except Exception:
+        result = False
+
+    _auth_enabled_cache[cache_key] = (now, result)
+    return result
+
+
+app.middleware("http")(auth_guard)
+
+
+@app.get("/login", response_class=HTMLResponse)
+async def login_page():
+    """Serve the login/register page."""
+    login_path = static_dir / "login.html"
+    if login_path.exists():
+        return HTMLResponse(content=login_path.read_text(), status_code=200)
+    return HTMLResponse(
+        content="<html><body><h1>Login page not found</h1></body></html>",
+        status_code=404,
+    )
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -111,20 +226,23 @@ async def health():
 
 
 @app.get("/api/status")
-async def get_status():
-    """Get current job status."""
-    return state_manager.to_dict()
+async def get_status(user: User | None = Depends(get_current_user)):
+    """Get current job status for the authenticated user."""
+    user_id = _resolve_user_id(user)
+    sm = per_user_state.get_state(user_id)
+    return sm.to_dict()
 
 
 @app.post("/api/submit")
-async def submit_job(request: dict[str, Any]):
+async def submit_job(request: dict[str, Any], user: User | None = Depends(get_current_user)):
     """Start processing a new job.
 
     Accepts either a URL or text input:
     - URL mode: {"url": "https://..."}
     - Text mode: {"title": "Job Title", "content": "Job description text..."}
     """
-    global current_task
+    user_id = _resolve_user_id(user)
+    sm = per_user_state.get_state(user_id)
 
     url = request.get("url", "")
     title = request.get("title")
@@ -135,8 +253,8 @@ async def submit_job(request: dict[str, Any]):
         return {"error": "Either 'url' or both 'title' and 'content' are required"}, 400
 
     # Check if already processing
-    if state_manager.is_active():
-        return {"error": "A job is already in progress", "state": state_manager.to_dict()}, 409
+    if sm.is_active():
+        return {"error": "A job is already in progress", "state": sm.to_dict()}, 409
 
     # Extract flags
     flags = {
@@ -154,51 +272,59 @@ async def submit_job(request: dict[str, Any]):
         await process_job(
             url or job_url,
             flags,
-            state_manager,
+            sm,
             log_broadcaster.broadcast,
             title=title,
             content=content,
+            user_id=user_id,
         )
 
-    current_task = asyncio.create_task(run_job())
+    task = asyncio.create_task(run_job())
+    user_tasks[user_id] = task
 
     # Wait a bit for state to update
     await asyncio.sleep(0.5)
 
-    return {"job_id": state_manager.job_id, "status": state_manager.state.value}
+    return {"job_id": sm.job_id, "status": sm.state.value}
 
 
 @app.get("/api/question")
-async def get_question():
+async def get_question(user: User | None = Depends(get_current_user)):
     """Get the current question."""
-    if state_manager.state.value != "waiting_questions":
-        return {"error": "No question available", "state": state_manager.state.value}, 400
+    user_id = _resolve_user_id(user)
+    sm = per_user_state.get_state(user_id)
+
+    if sm.state.value != "waiting_questions":
+        return {"error": "No question available", "state": sm.state.value}, 400
 
     return {
-        "index": state_manager.current_question_index,
-        "total": len(state_manager.questions),
-        "question": state_manager.questions[state_manager.current_question_index],
+        "index": sm.current_question_index,
+        "total": len(sm.questions),
+        "question": sm.questions[sm.current_question_index],
     }
 
 
 @app.post("/api/answer")
-async def submit_answer(request: dict[str, Any]):
+async def submit_answer(request: dict[str, Any], user: User | None = Depends(get_current_user)):
     """Submit an answer to the current question."""
-    if state_manager.state.value != "waiting_questions":
-        return {"error": "Not waiting for answers", "state": state_manager.state.value}, 400
+    user_id = _resolve_user_id(user)
+    sm = per_user_state.get_state(user_id)
+
+    if sm.state.value != "waiting_questions":
+        return {"error": "Not waiting for answers", "state": sm.state.value}, 400
 
     answer = request.get("answer", "")
 
     # Submit answer and check if all done
-    all_answered = state_manager.submit_answer(answer)
+    all_answered = sm.submit_answer(answer)
 
     # Broadcast progress update
-    await log_broadcaster.broadcast_progress(state_manager.current_step, state_manager.progress)
+    await log_broadcaster.broadcast_progress(sm.current_step, sm.progress)
 
     result = {
         "status": "success",
-        "next_state": state_manager.state.value,
-        "questions_remaining": len(state_manager.questions) - len(state_manager.answers),
+        "next_state": sm.state.value,
+        "questions_remaining": len(sm.questions) - len(sm.answers),
     }
 
     if all_answered:
@@ -208,19 +334,21 @@ async def submit_answer(request: dict[str, Any]):
 
 
 @app.post("/api/reset")
-async def reset_job():
+async def reset_job(user: User | None = Depends(get_current_user)):
     """Reset the job state."""
-    global current_task
+    user_id = _resolve_user_id(user)
+    sm = per_user_state.get_state(user_id)
 
-    # Cancel any running task
-    if current_task and not current_task.done():
-        current_task.cancel()
+    # Cancel any running task for this user
+    task = user_tasks.get(user_id)
+    if task and not task.done():
+        task.cancel()
         try:
-            await current_task
+            await task
         except asyncio.CancelledError:
             pass
 
-    state_manager.reset()
+    sm.reset()
 
     return {"status": "reset", "message": "State cleared"}
 

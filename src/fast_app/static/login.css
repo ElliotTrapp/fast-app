@@ -1,0 +1,113 @@
+body.login-page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 20px;
+}
+
+.login-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+    padding: 40px;
+    max-width: 420px;
+    width: 100%;
+}
+
+.login-card h1 {
+    text-align: center;
+    font-size: 2em;
+    margin-bottom: 8px;
+    color: #333;
+}
+
+.login-card .subtitle {
+    text-align: center;
+    color: #666;
+    font-size: 0.95em;
+    margin-bottom: 32px;
+}
+
+.login-card .form-group {
+    margin-bottom: 20px;
+}
+
+.login-card label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 600;
+    color: #333;
+    font-size: 0.9em;
+}
+
+.login-card input[type="email"],
+.login-card input[type="password"] {
+    width: 100%;
+    padding: 12px;
+    font-size: 15px;
+    border: 2px solid #e1e8ed;
+    border-radius: 8px;
+    transition: border-color 0.2s;
+    box-sizing: border-box;
+}
+
+.login-card input[type="email"]:focus,
+.login-card input[type="password"]:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.login-card .btn-primary {
+    width: 100%;
+    padding: 14px;
+    font-size: 16px;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    background: #667eea;
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.login-card .btn-primary:hover:not(:disabled) {
+    background: #5568d3;
+    transform: translateY(-1px);
+}
+
+.login-card .btn-primary:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.login-card .toggle-mode {
+    text-align: center;
+    margin-top: 20px;
+    color: #666;
+    font-size: 0.9em;
+}
+
+.login-card .toggle-mode a {
+    color: #667eea;
+    cursor: pointer;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.login-card .toggle-mode a:hover {
+    text-decoration: underline;
+}
+
+.login-card .error-message {
+    background: #fef2f2;
+    color: #dc3545;
+    padding: 12px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 0.9em;
+    border: 1px solid #fecaca;
+}
+

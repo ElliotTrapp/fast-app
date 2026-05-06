@@ -1,3 +1,4 @@
+# ruff: noqa: E501
 """Fact extraction prompt template.
 
 This module provides the prompt template for LLM-based fact extraction.

@@ -39,6 +39,7 @@ from ..services.auth import (
     create_access_token,
     get_current_user,
     hash_password,
+    is_auth_enabled,
     verify_password,
 )
 
@@ -145,6 +146,39 @@ async def login(
         "access_token": token,
         "token_type": "bearer",
     }
+
+
+@router.post("/logout")
+async def logout(response: Response) -> dict:
+    """Log out the current user by clearing the auth cookie.
+
+    This endpoint always returns 200, even if no session exists.
+    It clears the httpOnly cookie set during login.
+
+    Args:
+        response: FastAPI Response object for clearing cookies.
+
+    Returns:
+        Dict with status message.
+    """
+    response.delete_cookie(key="fast_app_token")
+    return {"status": "logged_out"}
+
+
+@router.get("/enabled")
+async def auth_enabled(session: SessionDep) -> dict:
+    """Check if authentication is enabled.
+
+    Returns whether auth is required for this Fast-App instance.
+    Used by the frontend to conditionally show login/logout UI.
+
+    Args:
+        session: Database session from dependency injection.
+
+    Returns:
+        Dict with "enabled" boolean.
+    """
+    return {"enabled": is_auth_enabled(session)}
 
 
 @router.get("/me", response_model=UserRead)
