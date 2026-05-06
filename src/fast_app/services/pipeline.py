@@ -12,14 +12,12 @@ from typing import Any, Protocol, runtime_checkable
 from ..config import Config
 from ..log import logger
 from ..services.cache import CacheManager, generate_job_id
+from ..services.cover_letter_merger import merge_cover_letter_with_base
 from ..services.job_extractor import JobExtractor
 from ..services.ollama import OllamaService
 from ..services.reactive_resume import ReactiveResumeClient
-from ..utils import (
-    merge_cover_letter_with_base,
-    merge_resume_with_base,
-    sanitize_name,
-)
+from ..services.resume_merger import merge_resume_with_base
+from ..utils import sanitize_name
 
 
 @dataclass

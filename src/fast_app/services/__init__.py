@@ -11,6 +11,7 @@ from .auth import (
     verify_password,
 )
 from .cache import CacheManager, generate_job_id
+from .cover_letter_merger import merge_cover_letter_with_base
 from .fact_extractor import FactExtractor
 from .job_extractor import JobExtractor
 from .jsearch_service import JSearchService
@@ -19,6 +20,7 @@ from .llm_service import LLMService
 from .ollama import OllamaService
 from .profile_service import ProfileService
 from .reactive_resume import ReactiveResumeClient
+from .resume_merger import merge_resume_with_base
 
 __all__ = [
     "ALGORITHM",
@@ -38,5 +40,7 @@ __all__ = [
     "generate_job_id",
     "hash_password",
     "is_auth_enabled",
+    "merge_cover_letter_with_base",
+    "merge_resume_with_base",
     "verify_password",
 ]
