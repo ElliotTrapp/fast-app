@@ -87,13 +87,14 @@ class TestLLMServiceCreation:
                 __import__("os").environ["FAST_APP_LLM_PROVIDER"] = existing_provider
 
     def test_database_config_defaults(self):
-        from fast_app.config import DatabaseConfig
+        from fast_app.config import AuthConfig, DatabaseConfig
 
         db = DatabaseConfig()
         assert db.path == ""
-        assert db.jwt_secret == ""
-        assert db.jwt_algorithm == "HS256"
-        assert db.jwt_expire_minutes == 1440
+        auth = AuthConfig()
+        assert auth.jwt_secret == ""
+        assert auth.jwt_algorithm == "HS256"
+        assert auth.jwt_expire_minutes == 1440
 
     def test_chroma_config_defaults(self):
         from fast_app.config import ChromaConfig

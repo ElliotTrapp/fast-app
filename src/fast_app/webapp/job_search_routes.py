@@ -26,14 +26,6 @@ from ..services.jsearch_service import JSearchService
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
-_DEFAULT_USER_ID = 1
-
-
-def _resolve_user_id(user: User | None) -> int:
-    if user is None:
-        return _DEFAULT_USER_ID
-    return user.id
-
 
 class JobSearchRequest(BaseModel):
     """Request body for job search."""

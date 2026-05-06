@@ -34,10 +34,10 @@ from sqlmodel import select
 
 from ..db import SessionDep
 from ..models.db_models import User, UserCreate, UserRead
-from ..services.auth import (
+from ..services.auth import get_current_user
+from ..services.auth_core import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
     create_access_token,
-    get_current_user,
     hash_password,
     is_auth_enabled,
     verify_password,

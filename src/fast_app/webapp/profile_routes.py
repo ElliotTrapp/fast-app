@@ -32,30 +32,11 @@ from ..db import SessionDep
 from ..models.db_models import ProfileCreate, ProfilePatch, ProfileRead, User, UserProfile
 from ..services.auth import get_current_user
 from ..services.profile_service import ProfileService
+from .dependencies import resolve_user_id
 
 router = APIRouter(prefix="/api/profiles", tags=["profiles"])
 
 _service = ProfileService()
-
-# Fallback user ID when auth is disabled
-_DEFAULT_USER_ID = 1
-
-
-def _resolve_user_id(user: User | None) -> int:
-    """Resolve the effective user ID from the authenticated user.
-
-    In auth-disabled mode (user is None), returns the default user ID (1).
-    In auth-enabled mode, returns the authenticated user's ID.
-
-    Args:
-        user: The authenticated User object, or None if auth is disabled.
-
-    Returns:
-        The effective user ID for profile operations.
-    """
-    if user is None:
-        return _DEFAULT_USER_ID
-    return user.id
 
 
 def _to_profile_read(profile: UserProfile) -> ProfileRead:
@@ -98,7 +79,7 @@ async def list_profiles(
     Returns:
         List of ProfileRead schemas.
     """
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
     profiles = _service.list_profiles(user_id, session)
     return [_to_profile_read(p) for p in profiles]
 
@@ -121,7 +102,7 @@ async def create_profile(
     Returns:
         ProfileRead schema for the newly created profile.
     """
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
     profile = _service.create_profile(data, user_id, session)
     return _to_profile_read(profile)
 
@@ -143,7 +124,7 @@ async def get_default_profile(
     Raises:
         HTTPException: 404 if no default profile is set.
     """
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
     profile = _service.get_default_profile(user_id, session)
     if profile is None:
         raise HTTPException(
@@ -172,7 +153,7 @@ async def import_profile(
     Returns:
         ProfileRead schema for the imported profile.
     """
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
     profile = _service.create_profile(data, user_id, session)
     return _to_profile_read(profile)
 
@@ -196,7 +177,7 @@ async def get_profile(
     Raises:
         HTTPException: 404 if profile not found or not owned by user.
     """
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
     profile = _service.get_profile(profile_id, user_id, session)
     if profile is None:
         raise HTTPException(
@@ -227,7 +208,7 @@ async def update_profile(
     Raises:
         HTTPException: 404 if profile not found or not owned by user.
     """
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
     profile = _service.update_profile(profile_id, user_id, data, session)
     if profile is None:
         raise HTTPException(
@@ -262,7 +243,7 @@ async def patch_profile(
     Raises:
         HTTPException: 404 if profile not found or not owned by user.
     """
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
     profile = _service.patch_profile(profile_id, user_id, data, session)
     if profile is None:
         raise HTTPException(
@@ -291,7 +272,7 @@ async def delete_profile(
     Raises:
         HTTPException: 404 if profile not found or not owned by user.
     """
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
     deleted = _service.delete_profile(profile_id, user_id, session)
     if not deleted:
         raise HTTPException(
@@ -320,7 +301,7 @@ async def export_profile(
     Raises:
         HTTPException: 404 if profile not found or not owned by user.
     """
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
     data = _service.export_profile(profile_id, user_id, session)
     if data is None:
         raise HTTPException(

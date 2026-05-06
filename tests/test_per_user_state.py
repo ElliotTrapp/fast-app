@@ -1,6 +1,6 @@
 """Tests for per-user state management.
 
-Tests PerUserStateManager isolation, _resolve_user_id, and state file paths.
+Tests PerUserStateManager isolation, resolve_user_id, and state file paths.
 
 Required deps: pip install -e ".[auth]"
 """
@@ -106,17 +106,17 @@ class TestPerUserStateManager:
 
 class TestResolveUserId:
     def test_returns_user_id_when_authenticated(self):
-        from fast_app.webapp.app import _resolve_user_id
+        from fast_app.webapp.dependencies import resolve_user_id
 
         class FakeUser:
             id = 42
 
-        assert _resolve_user_id(FakeUser()) == 42
+        assert resolve_user_id(FakeUser()) == 42
 
     def test_returns_one_when_none(self):
-        from fast_app.webapp.app import _resolve_user_id
+        from fast_app.webapp.dependencies import resolve_user_id
 
-        assert _resolve_user_id(None) == 1
+        assert resolve_user_id(None) == 1
 
 
 class TestStateManagerWithCustomStateFile:
