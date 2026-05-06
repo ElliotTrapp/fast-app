@@ -810,8 +810,9 @@ def status_command(config_path: str | None) -> None:
                     config.reactive_resume.endpoint, config.reactive_resume.api_key
                 )
                 if rr.test_connection():
-                    rr_status.append(                    f"✓ Reactive Resume connection "
-                    f"({config.reactive_resume.endpoint})")
+                    rr_status.append(
+                        f"✓ Reactive Resume connection ({config.reactive_resume.endpoint})"
+                    )
                     rr_status.append("  API key configured")
                 else:
                     rr_status.append("✗ Reactive Resume connection failed")
