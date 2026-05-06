@@ -1,3 +1,17 @@
+/**
+ * fetchWithAuth — Wrapper around fetch() that attaches the JWT token
+ * from localStorage if present. Mirrors Alpine.store('auth').fetchWithAuth
+ * but can be used before Alpine initialization completes.
+ */
+function fetchWithAuth(url, options = {}) {
+    const token = localStorage.getItem('fast_app_token');
+    if (token) {
+        options.headers = options.headers || {};
+        options.headers['Authorization'] = `Bearer ${token}`;
+    }
+    return fetch(url, options);
+}
+
 let statusCheckInterval = null;
 let currentJobId = null;
 
@@ -97,8 +111,7 @@ function handleMessage(data) {
 
 async function checkInitialState() {
     try {
-        const response = await fetch('/api/status');
-        const status = await response.json();
+        const response = await fetchWithAuth('/api/status');
 
         if (status.state === 'processing' || status.state === 'waiting_questions') {
             currentJobId = status.job_id;
@@ -155,7 +168,7 @@ submitBtn.addEventListener('click', async () => {
     submitBtn.textContent = 'Starting...';
 
     try {
-        const response = await fetch('/api/submit', {
+        const response = await fetchWithAuth('/api/submit', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -185,7 +198,7 @@ function startStatusPolling() {
 
     statusCheckInterval = setInterval(async () => {
         try {
-            const response = await fetch('/api/status');
+            const response = await fetchWithAuth('/api/status');
             const status = await response.json();
 
             updateProgress(status.current_step, status.progress);
@@ -239,7 +252,7 @@ function handleStateChange(newState) {
 
 async function showQuestion() {
     try {
-        const response = await fetch('/api/question');
+        const response = await fetchWithAuth('/api/question');
         const data = await response.json();
 
         if (data.error) {
@@ -264,7 +277,7 @@ submitAnswerBtn.addEventListener('click', async () => {
     const answer = answerInput.value.trim();
 
     try {
-        const response = await fetch('/api/answer', {
+        const response = await fetchWithAuth('/api/answer', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -350,7 +363,7 @@ retryBtn.addEventListener('click', () => {
 
 newJobBtn.addEventListener('click', async () => {
     try {
-        await fetch('/api/reset', { method: 'POST' });
+        await fetchWithAuth('/api/reset', { method: 'POST' });
         location.reload();
     } catch (error) {
         console.error('Failed to reset:', error);
@@ -366,7 +379,7 @@ cancelBtns.forEach(btn => {
         try {
             stopStatusPolling();
 
-            await fetch('/api/reset', { method: 'POST' });
+            await fetchWithAuth('/api/reset', { method: 'POST' });
 
             submissionForm.hidden = false;
             progressArea.hidden = true;

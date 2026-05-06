@@ -1,0 +1,22 @@
+<nav class="navbar" x-data x-show="true">
+  <div class="navbar-brand">
+    <a href="/" class="navbar-logo">🚀 Fast App</a>
+  </div>
+  <div class="navbar-links">
+    <a href="/" class="navbar-link">Generator</a>
+    <a href="/profile" class="navbar-link">Profile</a>
+    <a href="/knowledge" class="navbar-link">Knowledge</a>
+    <a href="/chat" class="navbar-link">Chat</a>
+  </div>
+  <div class="navbar-auth" x-data x-show="$store.auth.authEnabled">
+    <template x-if="$store.auth.isLoggedIn">
+      <div class="navbar-user">
+        <span class="navbar-email" x-text="$store.auth.user?.email || ''"></span>
+        <button class="btn-navbar-logout" @click="$store.auth.logout()">Logout</button>
+      </div>
+    </template>
+    <template x-if="!$store.auth.isLoggedIn">
+      <a href="/login" class="navbar-link">Login</a>
+    </template>
+  </div>
+</nav>

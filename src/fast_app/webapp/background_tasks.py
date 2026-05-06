@@ -29,6 +29,7 @@ async def process_job(
     broadcast_callback,
     title: str | None = None,
     content: str | None = None,
+    user_id: int = 1,
 ) -> None:
     """Process a job asynchronously in the background.
 
@@ -39,6 +40,7 @@ async def process_job(
         broadcast_callback: Async function to broadcast updates
         title: Job title for text input mode
         content: Job description text for text input mode
+        user_id: User ID for per-user knowledge service
     """
     try:
         # Load configuration
@@ -131,7 +133,7 @@ async def process_job(
                 try:
                     from ..services.knowledge import KnowledgeService
 
-                    knowledge_svc = KnowledgeService(config, user_id=1)
+                    knowledge_svc = KnowledgeService(config, user_id=user_id)
                     results = knowledge_svc.query_facts(
                         f"{job_data.get('title', '')} {job_data.get('description', '')[:200]}",
                         n=5,
@@ -188,7 +190,7 @@ async def process_job(
                             questions, answers, profile_data=profile, job_data=job_data
                         )
                         if result.facts:
-                            knowledge_svc = KnowledgeService(config, user_id=1)
+                            knowledge_svc = KnowledgeService(config, user_id=user_id)
                             stored_ids = knowledge_svc.store_facts(result.facts, job_url=url)
                             logger.success(f"Stored {len(stored_ids)} facts in knowledge base")
                     except ImportError:

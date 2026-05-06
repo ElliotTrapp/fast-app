@@ -17,14 +17,19 @@ class JobState(str, Enum):
 
 
 class StateManager:
-    """Manages persistent state for job processing."""
+    """Manages persistent state for job processing.
 
-    def __init__(self, state_dir: Path | None = None):
+    Each StateManager instance holds state for a single user/job.
+    PerUserStateManager creates separate instances per user with
+    different state_file paths.
+    """
+
+    def __init__(self, state_dir: Path | None = None, state_file: Path | None = None):
         self.state_dir = state_dir or Path.home() / ".fast-app"
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.logs_dir = self.state_dir / "logs"
         self.logs_dir.mkdir(exist_ok=True)
-        self.state_file = self.state_dir / "state.json"
+        self.state_file = state_file or self.state_dir / "state.json"
 
         # State fields
         self.state: JobState = JobState.IDLE
