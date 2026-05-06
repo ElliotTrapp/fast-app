@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fast App - Knowledge</title>
+    <link rel="stylesheet" href="/static/style.css?v=2">
+    <link rel="stylesheet" href="/static/app.css?v=1">
+    <link rel="stylesheet" href="/static/knowledge.css?v=1">
+    <script src="/static/vendor/htmx.min.js"></script>
+    <script defer src="/static/vendor/alpine.min.js"></script>
+    <script src="/static/app-base.js"></script>
+    <script src="/static/navbar.js"></script>
+</head>
+<body>
+    <div class="container" x-data="knowledgeEditor()">
+        <!-- Navbar -->
+        <nav class="navbar" x-show="true">
+            <div class="navbar-brand">
+                <a href="/" class="navbar-logo">🚀 Fast App</a>
+            </div>
+            <div class="navbar-links">
+                <a href="/" class="navbar-link">Generator</a>
+                <a href="/profile" class="navbar-link">Profile</a>
+                <a href="/knowledge" class="navbar-link active">Knowledge</a>
+                <a href="/chat" class="navbar-link">Chat</a>
+            </div>
+            <div class="navbar-auth" x-show="$store.auth.authEnabled">
+                <template x-if="$store.auth.isLoggedIn">
+                    <div class="navbar-user">
+                        <span class="navbar-email" x-text="$store.auth.user?.email || ''"></span>
+                        <button class="btn-navbar-logout" @click="$store.auth.logout()">Logout</button>
+                    </div>
+                </template>
+                <template x-if="!$store.auth.isLoggedIn">
+                    <a href="/login" class="navbar-link">Login</a>
+                </template>
+            </div>
+        </nav>
+
+        <!-- Search & Filter Bar -->
+        <div class="knowledge-toolbar">
+            <div class="search-bar">
+                <input type="text" x-model="searchQuery" placeholder="Search facts..." @keydown.enter="loadFacts()" class="search-input">
+                <button class="btn-primary" @click="loadFacts()">Search</button>
+            </div>
+            <div class="category-tabs">
+                <button class="category-tab" :class="{ active: selectedCategory === 'all' }" @click="selectedCategory = 'all'; loadFacts()">All</button>
+                <template x-for="cat in categories" :key="cat">
+                    <button class="category-tab" :class="{ active: selectedCategory === cat }" @click="selectedCategory = cat; loadFacts()" x-text="cat"></button>
+                </template>
+            </div>
+            <button class="btn-secondary" @click="showAddForm = !showAddForm">
+                <span x-text="showAddForm ? 'Cancel' : '+ Add Fact'"></span>
+            </button>
+        </div>
+
+        <!-- Add Fact Form -->
+        <div x-show="showAddForm" x-transition class="add-fact-form">
+            <h3>Add New Fact</h3>
+            <div class="form-group">
+                <label for="new-fact-content">Content</label>
+                <textarea id="new-fact-content" x-model="newFact.content" placeholder="e.g., 5 years of Python experience" rows="3"></textarea>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="new-fact-category">Category</label>
+                    <select id="new-fact-category" x-model="newFact.category" class="category-select">
+                        <option value="general">General</option>
+                        <option value="skill">Skill</option>
+                        <option value="experience">Experience</option>
+                        <option value="education">Education</option>
+                        <option value="certification">Certification</option>
+                        <option value="preference">Preference</option>
+                        <option value="personality">Personality</option>
+                        <option value="goal">Goal</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button class="btn-primary" @click="addFact()" :disabled="!newFact.content.trim()">Add Fact</button>
+                <button class="btn-secondary" @click="showAddForm = false">Cancel</button>
+            </div>
+        </div>
+
+        <!-- Error State -->
+        <div x-show="error" x-transition class="error-message" x-text="error"></div>
+
+        <!-- Loading State -->
+        <div x-show="loading" class="loading-state">
+            <div class="spinner"></div>
+            <p>Loading facts...</p>
+        </div>
+
+        <!-- Facts List -->
+        <div x-show="!loading" class="facts-list">
+            <template x-for="fact in facts" :key="fact.id">
+                <div class="fact-card">
+                    <!-- View Mode -->
+                    <template x-if="editingFact && editingFact.id === fact.id">
+                        <div class="fact-edit-form">
+                            <div class="form-group">
+                                <label>Content</label>
+                                <textarea x-model="editingFact.content" rows="3"></textarea>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>Category</label>
+                                    <select x-model="editingFact.category" class="category-select">
+                                        <option value="general">General</option>
+                                        <option value="skill">Skill</option>
+                                        <option value="experience">Experience</option>
+                                        <option value="education">Education</option>
+                                        <option value="certification">Certification</option>
+                                        <option value="preference">Preference</option>
+                                        <option value="personality">Personality</option>
+                                        <option value="goal">Goal</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="fact-edit-actions">
+                                <button class="btn-primary btn-sm" @click="saveEdit()">Save</button>
+                                <button class="btn-secondary btn-sm" @click="cancelEdit()">Cancel</button>
+                            </div>
+                        </div>
+                    </template>
+                    <template x-if="!(editingFact && editingFact.id === fact.id)">
+                        <div class="fact-view">
+                            <div class="fact-header">
+                                <span class="category-badge" :class="'badge-' + fact.category" x-text="fact.category"></span>
+                                <span class="fact-confidence" x-show="fact.confidence < 1">Confidence: <span x-text="(fact.confidence * 100).toFixed(0) + '%'"></span></span>
+                                <div class="fact-actions">
+                                    <button class="btn-icon" @click="startEdit(fact)" title="Edit">✏️</button>
+                                    <button class="btn-icon btn-remove" @click="deleteFact(fact.id)" title="Delete">🗑️</button>
+                                </div>
+                            </div>
+                            <div class="fact-content" x-text="fact.content"></div>
+                            <div class="fact-meta" x-show="fact.source || fact.job_url">
+                                <span x-show="fact.source" class="fact-source" x-text="'Source: ' + fact.source"></span>
+                                <a x-show="fact.job_url" :href="fact.job_url" target="_blank" class="fact-job-link" x-text="fact.job_url"></a>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </template>
+
+            <!-- Empty State -->
+            <div x-show="facts.length === 0 && !loading && !error" class="empty-state">
+                <div class="empty-icon">🧠</div>
+                <h2>No Facts Yet</h2>
+                <p class="empty-desc">Facts are extracted from your Q&A sessions and used to generate better resumes. Add facts manually or they'll be created automatically.</p>
+                <button class="btn-primary" @click="showAddForm = true">Add Your First Fact</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/knowledge.js?v=1"></script>
+</body>
+</html>

@@ -175,3 +175,93 @@ class TestDeleteFacts:
             json={"wrong_field": ["id1"]},
         )
         assert response.status_code == 422
+
+
+class TestAddFact:
+    """Tests for POST /api/knowledge/facts."""
+
+    def test_add_fact(self, client):
+        """Add fact endpoint creates a fact and returns 201 with fact data."""
+        response = client.post(
+            "/api/knowledge/facts",
+            json={
+                "content": "5 years of Python experience",
+                "category": "skill",
+            },
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["content"] == "5 years of Python experience"
+        assert data["category"] == "skill"
+        assert "id" in data
+        assert "created_at" in data
+
+    def test_add_fact_default_category(self, client):
+        """Add fact defaults category to 'general' when not provided."""
+        response = client.post(
+            "/api/knowledge/facts",
+            json={"content": "Some general fact"},
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["category"] == "general"
+
+
+class TestUpdateFact:
+    """Tests for PUT /api/knowledge/facts/{fact_id}."""
+
+    def test_update_fact_content(self, client):
+        """Update fact endpoint updates content and returns updated fact."""
+        create_response = client.post(
+            "/api/knowledge/facts",
+            json={"content": "Original content", "category": "skill"},
+        )
+        assert create_response.status_code == 201
+        fact_id = create_response.json()["id"]
+
+        update_response = client.put(
+            f"/api/knowledge/facts/{fact_id}",
+            json={"content": "Updated content"},
+        )
+        assert update_response.status_code == 200
+        data = update_response.json()
+        assert data["content"] == "Updated content"
+        assert data["category"] == "skill"
+        assert data["id"] != fact_id  # UUID changes on update
+
+    def test_update_fact_not_found(self, client):
+        """Update fact endpoint returns 404 for nonexistent fact ID."""
+        response = client.put(
+            "/api/knowledge/facts/nonexistent-id-12345",
+            json={"content": "Updated content"},
+        )
+        assert response.status_code == 404
+
+
+class TestGetCategories:
+    """Tests for GET /api/knowledge/categories."""
+
+    def test_get_categories(self, client):
+        """Get categories endpoint returns list of unique categories."""
+        client.post(
+            "/api/knowledge/facts",
+            json={"content": "Python skill", "category": "skill"},
+        )
+        client.post(
+            "/api/knowledge/facts",
+            json={"content": "Work experience", "category": "experience"},
+        )
+
+        response = client.get("/api/knowledge/categories")
+        assert response.status_code == 200
+        categories = response.json()
+        assert isinstance(categories, list)
+        assert "skill" in categories
+        assert "experience" in categories
+
+    def test_get_categories_empty(self, client):
+        """Get categories returns a list even when no facts were added in this test."""
+        response = client.get("/api/knowledge/categories")
+        assert response.status_code == 200
+        categories = response.json()
+        assert isinstance(categories, list)

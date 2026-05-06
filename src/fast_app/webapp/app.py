@@ -215,6 +215,18 @@ async def profile_page():
     )
 
 
+@app.get("/knowledge", response_class=HTMLResponse)
+async def knowledge_page():
+    """Serve the knowledge management page."""
+    knowledge_path = static_dir / "knowledge.html"
+    if knowledge_path.exists():
+        return HTMLResponse(content=knowledge_path.read_text(), status_code=200)
+    return HTMLResponse(
+        content="<html><body><h1>Knowledge page not found</h1></body></html>",
+        status_code=404,
+    )
+
+
 @app.get("/", response_class=HTMLResponse)
 async def root():
     """Serve the main HTML page."""
