@@ -38,8 +38,11 @@ def reset_secret():
 @pytest.fixture()
 def client():
     """Create a TestClient with auth-disabled mode and in-memory DB."""
+    from unittest.mock import patch
+
     from sqlmodel import Session, SQLModel, create_engine
 
+    from fast_app.config import ChromaConfig, Config, DatabaseConfig, LLMConfig, OllamaConfig
     from fast_app.db import get_session
     from fast_app.services.auth import get_current_user
     from fast_app.webapp.app import app
@@ -51,13 +54,27 @@ def client():
         with Session(engine) as session:
             yield session
 
+    # Create a test config that doesn't require config.json
+    test_config = Config(
+        ollama=OllamaConfig(),
+        database=DatabaseConfig(),
+        llm=LLMConfig(),
+        chroma=ChromaConfig(),
+    )
+
+    def _test_get_service(user_id: int):
+        from fast_app.services.knowledge import KnowledgeService
+
+        return KnowledgeService(test_config, user_id)
+
     app.dependency_overrides[get_session] = _test_get_session
     app.dependency_overrides[get_current_user] = lambda: None
 
-    from fastapi.testclient import TestClient
+    with patch("fast_app.webapp.knowledge_routes._get_service", _test_get_service):
+        from fastapi.testclient import TestClient
 
-    with TestClient(app) as c:
-        yield c
+        with TestClient(app) as c:
+            yield c
 
     app.dependency_overrides.clear()
 
