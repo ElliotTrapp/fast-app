@@ -7,7 +7,6 @@ from typing import Any
 import click
 
 from .config import load_config
-from .dotenv import load_dotenv
 from .log import logger
 from .services.cache import CacheManager, generate_job_id
 from .services.job_extractor import JobExtractor
@@ -25,8 +24,6 @@ from .utils import (
     merge_resume_with_base,
     sanitize_name,
 )
-
-load_dotenv()
 
 
 @click.group()

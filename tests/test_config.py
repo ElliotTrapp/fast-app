@@ -67,6 +67,21 @@ class TestConfig:
         assert config.reactive_resume.endpoint == "http://localhost:3000"
         assert config.output.directory == "generated"
 
+    def test_from_env_with_defaults(self, monkeypatch):
+        monkeypatch.delenv("FAST_APP_LLM_PROVIDER", raising=False)
+        monkeypatch.delenv("FAST_APP_JWT_SECRET", raising=False)
+        config = Config.from_env()
+        assert config.ollama.endpoint == "http://localhost:11434"
+        assert config.llm.provider == "ollama"
+        assert config.auth.jwt_secret == ""
+
+    def test_from_env_reads_env_vars(self, monkeypatch):
+        monkeypatch.setenv("FAST_APP_LLM_PROVIDER", "opencode-go")
+        monkeypatch.setenv("FAST_APP_JWT_SECRET", "my-secret")
+        config = Config.from_env()
+        assert config.llm.provider == "opencode-go"
+        assert config.auth.jwt_secret == "my-secret"
+
     def test_from_dict_minimal(self):
         config = Config.from_dict({})
         assert config.ollama.model == "llama3.2"
@@ -115,13 +130,13 @@ class TestConfig:
 
 
 class TestFindConfigFile:
-    def test_raises_if_not_found(self, monkeypatch, tmp_path):
+    def test_returns_none_if_not_found(self, monkeypatch, tmp_path):
         monkeypatch.chdir(tmp_path)
         monkeypatch.delenv("FAST_APP_CONFIG", raising=False)
         monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
 
-        with pytest.raises(FileNotFoundError):
-            find_config_file()
+        result = find_config_file()
+        assert result is None
 
     def test_uses_cli_path_if_provided(self):
         import tempfile
@@ -191,3 +206,16 @@ class TestLoadConfig:
             assert isinstance(config.reactive_resume, ReactiveResumeConfig)
         finally:
             Path(temp_path).unlink()
+
+    def test_load_config_without_file(self, monkeypatch, tmp_path):
+        """load_config works without a config file — uses env vars + defaults."""
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.delenv("FAST_APP_CONFIG", raising=False)
+        monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+        monkeypatch.delenv("OLLAMA_ENDPOINT", raising=False)
+        monkeypatch.delenv("FAST_APP_JWT_SECRET", raising=False)
+
+        config = load_config()
+        assert isinstance(config, Config)
+        assert config.ollama.endpoint == "http://localhost:11434"
+        assert config.llm.provider == "ollama"

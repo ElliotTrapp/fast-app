@@ -1,4 +1,19 @@
-"""Configuration management with XDG-compliant loading."""
+"""Configuration management with environment variable loading.
+
+Configuration is loaded from environment variables with sensible defaults.
+A config.json file can optionally be used via --config flag or FAST_APP_CONFIG
+env var, but is not required — all settings have defaults that can be
+overridden via environment variables.
+
+## Priority Order (highest to lowest)
+
+1. CLI flags (e.g., --provider, --model)
+2. Environment variables (FAST_APP_*)
+3. config.json file (optional, via --config or FAST_APP_CONFIG)
+4. Built-in defaults
+
+See: docs/guide/llm-providers.md, docs/adr/003-env-only-config.md
+"""
 
 import json
 import os
@@ -77,6 +92,11 @@ class Config:
 
     @classmethod
     def from_dict(cls, data: dict) -> "Config":
+        """Create Config from a dictionary (e.g., parsed from config.json).
+
+        Supports both legacy keys ("resume", "database.jwt_*") and new keys
+        ("reactive_resume", "auth.jwt_*") for backward compatibility.
+        """
         ollama_data = data.get("ollama", {})
         resume_data = data.get("resume", data.get("reactive_resume", {}))
         output_data = data.get("output", {})
@@ -132,32 +152,37 @@ class Config:
         )
 
     @classmethod
-    def from_file(cls, path: str) -> "Config":
-        file_path = Path(path).expanduser()
+    def from_env(cls) -> "Config":
+        """Create Config from environment variables and built-in defaults.
 
-        if not file_path.exists():
-            raise FileNotFoundError(f"Config file not found: {path}")
+        This is the primary configuration method. All settings have defaults
+        that can be overridden via FAST_APP_* environment variables.
+        """
+        config = cls()
 
-        with open(file_path) as f:
-            data = json.load(f)
-
-        config = cls.from_dict(data)
-
-        # Override with environment variables if set
+        # Ollama settings
         if os.environ.get("OLLAMA_ENDPOINT"):
             config.ollama.endpoint = os.environ["OLLAMA_ENDPOINT"]
         if os.environ.get("OLLAMA_MODEL"):
             config.ollama.model = os.environ["OLLAMA_MODEL"]
+
+        # Reactive Resume settings
         if os.environ.get("RESUME_ENDPOINT"):
             config.reactive_resume.endpoint = os.environ["RESUME_ENDPOINT"]
         if os.environ.get("RESUME_API_KEY"):
             config.reactive_resume.api_key = os.environ["RESUME_API_KEY"]
+
+        # Database settings
         if os.environ.get("FAST_APP_DB_PATH"):
             config.database.path = os.environ["FAST_APP_DB_PATH"]
+
+        # Auth settings
         if os.environ.get("FAST_APP_JWT_SECRET"):
             config.auth.jwt_secret = os.environ["FAST_APP_JWT_SECRET"]
         if os.environ.get("FAST_APP_JWT_EXPIRE_MINUTES"):
             config.auth.jwt_expire_minutes = int(os.environ["FAST_APP_JWT_EXPIRE_MINUTES"])
+
+        # LLM settings
         if os.environ.get("FAST_APP_LLM_PROVIDER"):
             config.llm.provider = os.environ["FAST_APP_LLM_PROVIDER"]
         if os.environ.get("FAST_APP_LLM_MODEL"):
@@ -166,28 +191,89 @@ class Config:
             config.llm.base_url = os.environ["FAST_APP_LLM_BASE_URL"]
         if os.environ.get("FAST_APP_LLM_API_KEY"):
             config.llm.api_key = os.environ["FAST_APP_LLM_API_KEY"]
+
+        # ChromaDB settings
         if os.environ.get("FAST_APP_CHROMA_PATH"):
             config.chroma.path = os.environ["FAST_APP_CHROMA_PATH"]
         if os.environ.get("FAST_APP_CHROMA_EMBEDDING_MODEL"):
             config.chroma.embedding_model = os.environ["FAST_APP_CHROMA_EMBEDDING_MODEL"]
         if os.environ.get("FAST_APP_CHROMA_CLIENT_TYPE"):
             config.chroma.client_type = os.environ["FAST_APP_CHROMA_CLIENT_TYPE"]
+
+        # JSearch settings
         if os.environ.get("FAST_APP_JSEARCH_API_KEY"):
             config.jsearch.api_key = os.environ["FAST_APP_JSEARCH_API_KEY"]
 
         return config
 
+    @classmethod
+    def from_file(cls, path: str) -> "Config":
+        """Load Config from a JSON file, then apply env var overrides.
 
-def find_config_file(cli_path: str | None = None) -> Path:
-    """Find config file in order of precedence.
+        This is for backward compatibility with config.json files.
+        Environment variables take precedence over file values.
+        """
+        file_path = Path(path).expanduser()
 
-    Order:
-    1. CLI --config flag
+        if not file_path.exists():
+            raise FileNotFoundError(f"Config file not found: {path}")
+
+        with open(file_path) as f:
+            data = json.load(f)
+
+        # Start with file values, then overlay env vars
+        return cls.from_dict(data)._apply_env_overrides()
+
+    def _apply_env_overrides(self) -> "Config":
+        """Apply environment variable overrides to an existing config.
+
+        Environment variables take precedence over all other sources.
+        """
+        if os.environ.get("OLLAMA_ENDPOINT"):
+            self.ollama.endpoint = os.environ["OLLAMA_ENDPOINT"]
+        if os.environ.get("OLLAMA_MODEL"):
+            self.ollama.model = os.environ["OLLAMA_MODEL"]
+        if os.environ.get("RESUME_ENDPOINT"):
+            self.reactive_resume.endpoint = os.environ["RESUME_ENDPOINT"]
+        if os.environ.get("RESUME_API_KEY"):
+            self.reactive_resume.api_key = os.environ["RESUME_API_KEY"]
+        if os.environ.get("FAST_APP_DB_PATH"):
+            self.database.path = os.environ["FAST_APP_DB_PATH"]
+        if os.environ.get("FAST_APP_JWT_SECRET"):
+            self.auth.jwt_secret = os.environ["FAST_APP_JWT_SECRET"]
+        if os.environ.get("FAST_APP_JWT_EXPIRE_MINUTES"):
+            self.auth.jwt_expire_minutes = int(os.environ["FAST_APP_JWT_EXPIRE_MINUTES"])
+        if os.environ.get("FAST_APP_LLM_PROVIDER"):
+            self.llm.provider = os.environ["FAST_APP_LLM_PROVIDER"]
+        if os.environ.get("FAST_APP_LLM_MODEL"):
+            self.llm.model = os.environ["FAST_APP_LLM_MODEL"]
+        if os.environ.get("FAST_APP_LLM_BASE_URL"):
+            self.llm.base_url = os.environ["FAST_APP_LLM_BASE_URL"]
+        if os.environ.get("FAST_APP_LLM_API_KEY"):
+            self.llm.api_key = os.environ["FAST_APP_LLM_API_KEY"]
+        if os.environ.get("FAST_APP_CHROMA_PATH"):
+            self.chroma.path = os.environ["FAST_APP_CHROMA_PATH"]
+        if os.environ.get("FAST_APP_CHROMA_EMBEDDING_MODEL"):
+            self.chroma.embedding_model = os.environ["FAST_APP_CHROMA_EMBEDDING_MODEL"]
+        if os.environ.get("FAST_APP_CHROMA_CLIENT_TYPE"):
+            self.chroma.client_type = os.environ["FAST_APP_CHROMA_CLIENT_TYPE"]
+        if os.environ.get("FAST_APP_JSEARCH_API_KEY"):
+            self.jsearch.api_key = os.environ["FAST_APP_JSEARCH_API_KEY"]
+        return self
+
+
+def find_config_file(cli_path: str | None = None) -> Path | None:
+    """Find an optional config file.
+
+    Search order:
+    1. CLI --config flag (must exist if specified)
     2. FAST_APP_CONFIG env var
     3. ./config.json
     4. ~/.config/fast-app/config.json
 
-    Raises FileNotFoundError if not found.
+    Returns None if no config file is found (which is fine —
+    config works with env vars and defaults alone).
+    Raises FileNotFoundError only if an explicit --config path doesn't exist.
     """
     if cli_path:
         path = Path(cli_path).expanduser()
@@ -210,17 +296,25 @@ def find_config_file(cli_path: str | None = None) -> Path:
     if xdg_path.exists():
         return xdg_path
 
-    raise FileNotFoundError(
-        "No config file found. Checked:\n"
-        f"  1. --config flag\n"
-        f"  2. FAST_APP_CONFIG env var\n"
-        f"  3. {cwd_path}\n"
-        f"  4. {xdg_path}\n"
-        "Create a config.json file or specify --config"
-    )
+    return None
 
 
 def load_config(cli_path: str | None = None) -> Config:
-    """Load configuration from file."""
+    """Load configuration from environment variables and optional config file.
+
+    Loads .env file first (if python-dotenv is installed), then applies
+    config file values (if found), then applies env var overrides on top.
+
+    If a config file is found (via --config flag, FAST_APP_CONFIG env var,
+    or default locations), it is loaded first and then env vars override.
+    If no config file exists, configuration comes entirely from env vars
+    with sensible built-in defaults.
+    """
+    from .dotenv import load_dotenv
+
+    load_dotenv()
+
     config_path = find_config_file(cli_path)
-    return Config.from_file(str(config_path))
+    if config_path is not None:
+        return Config.from_file(str(config_path))
+    return Config.from_env()
