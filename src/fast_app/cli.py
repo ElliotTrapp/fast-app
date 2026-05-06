@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from typing import Any
 
 import click
 
@@ -186,7 +187,7 @@ def generate(
         # Load configuration
         config = load_config(config_path)
         if api_key:
-            config.resume.api_key = api_key
+            config.reactive_resume.api_key = api_key
 
         # Override LLM provider if specified
         if provider:
@@ -213,7 +214,9 @@ def generate(
                 raise click.ClickException(f"Failed to download model '{config.ollama.model}'")
 
         # Initialize Reactive Resume client
-        rr_client = ReactiveResumeClient(config.resume.endpoint, config.resume.api_key)
+        rr_client = ReactiveResumeClient(
+            config.reactive_resume.endpoint, config.reactive_resume.api_key
+        )
 
         # Initialize cache
         output_dir = Path.cwd() / config.output.directory
@@ -585,7 +588,7 @@ def test_connection(config_path: str | None, api_key: str | None) -> None:
     try:
         config = load_config(config_path)
         if api_key:
-            config.resume.api_key = api_key
+            config.reactive_resume.api_key = api_key
 
         click.echo(f"Testing Ollama at {config.ollama.endpoint}...")
         ollama = OllamaService(config.ollama)
@@ -601,12 +604,14 @@ def test_connection(config_path: str | None, api_key: str | None) -> None:
         else:
             logger.error("Cannot connect to Ollama")
 
-        click.echo(f"\nTesting Reactive Resume at {config.resume.endpoint}...")
-        rr_client = ReactiveResumeClient(config.resume.endpoint, config.resume.api_key)
+        click.echo(f"\nTesting Reactive Resume at {config.reactive_resume.endpoint}...")
+        rr_client = ReactiveResumeClient(
+            config.reactive_resume.endpoint, config.reactive_resume.api_key
+        )
 
         if rr_client.test_connection():
             logger.success("Reactive Resume connected")
-            if config.resume.api_key:
+            if config.reactive_resume.api_key:
                 logger.success("API key configured")
             else:
                 logger.warning("No API key configured (set in config or via --api-key)")
@@ -657,7 +662,7 @@ def list_jobs(config_path: str | None, company: str | None, recent: int | None) 
 
         cache = CacheManager(output_dir)
 
-        jobs: list[dict[str, any]] = []
+        jobs: list[dict[str, Any]] = []
 
         for company_dir in sorted(output_dir.iterdir()):
             if not company_dir.is_dir():
@@ -800,10 +805,14 @@ def status_command(config_path: str | None) -> None:
         rr_ok = True
         try:
             config = load_config(config_path)
-            if config.resume.api_key:
-                rr = ReactiveResumeClient(config.resume.endpoint, config.resume.api_key)
+            if config.reactive_resume.api_key:
+                rr = ReactiveResumeClient(
+                    config.reactive_resume.endpoint, config.reactive_resume.api_key
+                )
                 if rr.test_connection():
-                    rr_status.append(f"✓ Reactive Resume connection ({config.resume.endpoint})")
+                    rr_status.append(
+                        f"✓ Reactive Resume connection ({config.reactive_resume.endpoint})"
+                    )
                     rr_status.append("  API key configured")
                 else:
                     rr_status.append("✗ Reactive Resume connection failed")
@@ -1123,12 +1132,12 @@ def _get_user_id(config_path: str | None) -> int:
     token = _load_token()
     if token:
         try:
-            from .services.auth import SECRET_KEY, decode_access_token
+            from .services.auth import JWT_SECRET, decode_access_token
 
-            if SECRET_KEY:
+            if JWT_SECRET:
                 payload = decode_access_token(token)
                 return int(payload.get("sub", 1))
-        except (ValueError, Exception):
+        except Exception:
             pass
     return 1
 
