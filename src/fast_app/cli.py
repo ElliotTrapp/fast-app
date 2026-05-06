@@ -1,5 +1,6 @@
 """CLI for fast-app."""
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Any
@@ -8,20 +9,17 @@ import click
 
 from .config import load_config
 from .log import logger
-from .services.cache import CacheManager, generate_job_id
-from .services.job_extractor import JobExtractor
+from .services.cache import CacheManager
+from .services.cli_callbacks import CLICallbacks
 from .services.ollama import OllamaService
+from .services.pipeline import PipelineFlags, PipelineService
 from .services.reactive_resume import ReactiveResumeClient
-from .utils import (
+from .utils import (  # noqa: F401 - re-exported for CLICallbacks and tests
     ask_questions_interactive,
-    check_existing_cover_letter,
-    check_existing_resume,
     find_profile_file,
     load_base_cover_letter,
     load_base_resume,
     load_profile,
-    merge_cover_letter_with_base,
-    merge_resume_with_base,
     sanitize_name,
 )
 
@@ -199,6 +197,7 @@ def generate(
         ollama = OllamaService(config.ollama)
         profile = load_profile(profile_path)
         base_resume = load_base_resume(base_path)
+        base_cover_letter_data = load_base_cover_letter(base_cover_letter)
 
         # Check Ollama connection and model availability
         if not ollama.check_connection():
@@ -219,344 +218,47 @@ def generate(
         output_dir = Path.cwd() / config.output.directory
         cache = CacheManager(output_dir)
 
-        # Determine input mode and extract job data
-        text_mode = bool(job_title and content)
+        # Initialize callbacks and pipeline
+        callbacks = CLICallbacks(verbose=verbose, debug=debug)
+        flags = PipelineFlags(
+            force=force,
+            overwrite_resume=overwrite_resume,
+            skip_questions=skip_questions,
+            skip_cover_letter=skip_cover_letter,
+            no_knowledge=no_knowledge,
+            review_facts=review_facts,
+            debug=debug,
+            verbose=verbose,
+        )
 
-        if text_mode:
-            job_id = generate_job_id(content)
-            effective_url = job_url_opt or ""
-        else:
-            job_id = generate_job_id(url)
-            effective_url = url
+        pipeline = PipelineService(
+            config=config,
+            ollama=ollama,
+            cache=cache,
+            rr_client=rr_client,
+            profile=profile,
+            base_resume=base_resume,
+            base_cover_letter=base_cover_letter_data,
+            callbacks=callbacks,
+            user_id=_get_user_id(config_path),
+        )
 
-        # Check if we've already cached this job
-        used_cache = False
-        job_data = None
-        questions = []
-        answers = []
-        job_dir = None
-
-        if not text_mode:
-            existing_job_dir = cache.has_cached_job(url)
-            if existing_job_dir and not force:
-                used_cache = True
-                job_data = cache.get_cached_job(existing_job_dir)
-                job_description = job_data.get("description", "")
-                raw_title = job_data.get("title", "Unknown")
-                raw_company = job_data.get("company", "Unknown")
-                job_title = sanitize_name(raw_title)
-                company = sanitize_name(raw_company)
-                job_dir = existing_job_dir
-
-                logger.cache_hit("job", str(existing_job_dir))
-                if verbose and not debug:
-                    logger.success("Using cached job data")
-
-                # Check for cached questions/answers
-                if not skip_questions:
-                    questions_path = existing_job_dir / "questions.json"
-                    answers_path = existing_job_dir / "answers.json"
-
-                    if questions_path.exists() and answers_path.exists():
-                        questions = cache.get_cached_questions(existing_job_dir) or []
-                        answers = cache.get_cached_answers(existing_job_dir) or []
-                        logger.cache_hit("questions", str(questions_path))
-                        logger.cache_hit("answers", str(answers_path))
-                        if verbose and not debug:
-                            logger.success("Using cached questions and answers")
-
-        if not used_cache:
-            extractor = JobExtractor(ollama.client, config.ollama.model)
-            if text_mode:
-                job_data = extractor.extract_from_text(job_title, content, url=effective_url)
-            else:
-                job_data = extractor.extract_from_url(url)
-
-            raw_title = job_data.get("title", "Unknown")
-            raw_company = job_data.get("company", "Unknown")
-            job_title = sanitize_name(raw_title)
-            company = sanitize_name(raw_company)
-            job_description = job_data.get("description", "")
-
-            click.echo(f"   Found: {job_title} at {company}")
-
-            logger.detail("job_id", job_id)
-            logger.detail("company", company)
-            logger.detail("title", job_title)
-
-            job_dir = cache.get_job_dir(company, job_title, job_id, create=True)
-            cache.save_job(job_dir, job_data)
-            logger.cache_save("job", str(job_dir / "job.json"))
-            if verbose and not debug:
-                click.echo("   💾 Saved: job.json")
-
-            if not skip_questions:
-                questions_path = job_dir / "questions.json"
-                answers_path = job_dir / "answers.json"
-
-                if not force and questions_path.exists() and answers_path.exists():
-                    questions = cache.get_cached_questions(job_dir) or []
-                    answers = cache.get_cached_answers(job_dir) or []
-                    logger.cache_hit("questions", str(questions_path))
-                    logger.cache_hit("answers", str(answers_path))
-                    if verbose and not debug:
-                        logger.success("Using cached questions and answers")
-                else:
-                    knowledge_facts = None
-                    if not no_knowledge:
-                        try:
-                            from .services.knowledge import KnowledgeService
-
-                            knowledge_svc = KnowledgeService(
-                                config, user_id=_get_user_id(config_path)
-                            )
-                            results = knowledge_svc.query_facts(
-                                f"{job_data.get('title', '')} "
-                                f"{job_data.get('description', '')[:200]}",
-                                n=5,
-                            )
-                            if results:
-                                knowledge_facts = [r.content for r in results]
-                                logger.info(f"Injected {len(results)} facts from knowledge base")
-                        except ImportError:
-                            pass
-                        except Exception:
-                            pass
-
-                    questions = ollama.generate_questions(
-                        job_data, profile, knowledge_context=knowledge_facts
-                    )
-                    if questions:
-                        cache.save_questions(job_dir, questions)
-                        logger.cache_save("questions", str(questions_path))
-                        if verbose and not debug:
-                            click.echo("   💾 Saved: questions.json")
-
-                        answers = ask_questions_interactive(questions)
-                        cache.save_answers(job_dir, answers)
-                        logger.cache_save("answers", str(answers_path))
-                        if verbose and not debug:
-                            click.echo("   💾 Saved: answers.json")
-
-                        if not no_knowledge and questions and answers:
-                            try:
-                                from .services.fact_extractor import FactExtractor
-                                from .services.knowledge import KnowledgeService
-                                from .services.llm_service import LLMService
-
-                                llm_service = LLMService(config)
-                                fact_extractor = FactExtractor(llm_service)
-                                result = fact_extractor.extract_facts_from_answers(
-                                    questions, answers, profile_data=profile, job_data=job_data
-                                )
-                                if result.facts:
-                                    if review_facts:
-                                        click.echo("\n📝 Extracted facts:")
-                                        for i, fact in enumerate(result.facts, 1):
-                                            click.echo(f"  {i}. [{fact.category}] {fact.content}")
-                                        if not click.confirm("Store these facts?"):
-                                            click.echo("   Skipping fact storage.")
-                                            result = None
-
-                                    if result and result.facts:
-                                        knowledge_svc = KnowledgeService(
-                                            config, user_id=_get_user_id(config_path)
-                                        )
-                                        stored_ids = knowledge_svc.store_facts(
-                                            result.facts, job_url=effective_url or url or ""
-                                        )
-                                        logger.success(
-                                            f"Stored {len(stored_ids)} facts in knowledge base"
-                                        )
-                            except ImportError:
-                                logger.warning(
-                                    "Knowledge dependencies not installed, skipping fact extraction"
-                                )
-                            except Exception as e:
-                                logger.warning(f"Fact extraction failed: {e}")
-                    else:
-                        logger.warning("No questions generated, proceeding with resume creation.")
-
-        # ============================================
-        # PHASE 1: Generate all local data first
-        # ============================================
-
-        # Generate or load resume content from LLM
-        resume_path = job_dir / "resume.json"
-
-        if not force and resume_path.exists():
-            resume_data = cache.get_cached_resume(job_dir)
-            logger.cache_hit("resume", str(resume_path))
-            if verbose and not debug:
-                logger.success("Using cached resume data")
-        else:
-            # Get content from LLM (only summary and sections)
-            resume_content = ollama.generate_resume(
-                job_data,
-                profile,
-                questions=questions if questions else None,
-                answers=answers if answers else None,
-                output_path=str(job_dir / "debug_llm_output.json"),
+        # Run the pipeline
+        result = asyncio.run(
+            pipeline.run(
+                url=url or "",
+                flags=flags,
+                job_title_input=job_title,
+                content=content,
+                job_url_opt=job_url_opt,
             )
+        )
 
-            # Merge with base template and profile to get full ResumeData
-            resume_data = merge_resume_with_base(resume_content, profile, base_resume)
-
-            # Cache the merged result
-            cache.save_resume(job_dir, resume_data)
-            logger.cache_save("resume", str(resume_path))
-            if verbose and not debug:
-                click.echo("   💾 Saved: resume.json")
-
-        final_resume = resume_data
-
+        # Handle --output flag
         if output:
             output_path = Path(output)
-            output_path.write_text(json.dumps(final_resume, indent=2))
+            output_path.write_text(json.dumps(result.resume_data, indent=2))
             click.echo(f"   Saved JSON to {output}")
-
-        # Generate or load cover letter content from LLM
-        cover_letter_data = None
-
-        if not skip_cover_letter:
-            base_cl = load_base_cover_letter(base_cover_letter)
-            cover_letter_path = job_dir / "cover_letter.json"
-
-            if not force and cover_letter_path.exists():
-                cover_letter_data = cache.get_cached_cover_letter(job_dir)
-                logger.cache_hit("cover_letter", str(cover_letter_path))
-                if verbose and not debug:
-                    logger.success("Using cached cover letter data")
-
-            if not cover_letter_data:
-                # Get content from LLM (only recipient and content)
-                cover_letter_content = ollama.generate_cover_letter(
-                    job_data,
-                    profile,
-                    questions=questions if questions else None,
-                    answers=answers if answers else None,
-                    output_path=str(job_dir / "debug_cover_letter_output.json"),
-                )
-
-                # Merge with base template and profile to get full CoverLetterData
-                cover_letter_data = merge_cover_letter_with_base(
-                    cover_letter_content, profile, base_cl, job_title, company
-                )
-
-                # Cache the merged result
-                cache.save_cover_letter(job_dir, cover_letter_data)
-                logger.cache_save("cover_letter", str(cover_letter_path))
-                if verbose and not debug:
-                    click.echo("   💾 Saved: cover_letter.json")
-
-                # Debug: Log the cover letter content
-                if debug:
-                    content_len = len(cover_letter_content.get("content", ""))
-                    click.echo(f"\n📝 Generated cover letter content length: {content_len}")
-                    click.echo(f"📝 Cover letter content keys: {list(cover_letter_content.keys())}")
-
-            final_cover_letter = cover_letter_data
-
-            # Debug: Log the merged cover letter
-            if debug:
-                summary_content = final_cover_letter.get("summary", {}).get("content", "")
-                click.echo(
-                    f"\n📝 Merged cover letter summary content length: {len(summary_content)}"
-                )
-
-        # ============================================
-        # PHASE 2: Create/update in Reactive Resume
-        # ============================================
-
-        resume_title = f"{job_title} at {company} Resume"
-
-        # Check for existing resume
-        existing_resume_id = check_existing_resume(rr_client, cache, job_dir, overwrite_resume)
-
-        if existing_resume_id and not overwrite_resume:
-            logger.error(f"Resume '{resume_title}' already exists")
-            click.echo(
-                click.style(
-                    f"\n❌ Error: Resume '{resume_title}' already exists.",
-                    fg="red",
-                )
-            )
-            click.echo(
-                click.style(
-                    "   Use --overwrite-resume to replace it.",
-                    fg="yellow",
-                )
-            )
-            raise click.ClickException(
-                f"Resume '{resume_title}' already exists. Use --overwrite-resume to overwrite."
-            )
-
-        # Add notes with URL and description to resume
-        final_resume["metadata"]["notes"] = f"{effective_url}\n\n{job_description}"
-
-        click.echo("\n🚀 Creating resume in Reactive Resume...")
-
-        # Create resume with title and company tag
-        resume_id = rr_client.create_resume(resume_title, tags=[company])
-
-        # Update with data
-        rr_client.update_resume(resume_id, final_resume)
-
-        # Cache the reactive resume metadata
-        cache.save_reactive_resume(
-            job_dir,
-            {
-                "resume_id": resume_id,
-                "title": resume_title,
-            },
-        )
-        logger.cache_save("reactive_resume", str(job_dir / "reactive_resume.json"))
-
-        resume_url = rr_client.get_resume_url(resume_id)
-        logger.success(f"Resume created: {resume_url}")
-
-        # Create cover letter if requested
-        if not skip_cover_letter and final_cover_letter:
-            cover_letter_title = f"{job_title} at {company} Cover Letter"
-
-            # Check for existing cover letter using dedicated function
-            existing_cl_id = check_existing_cover_letter(
-                rr_client, cache, job_dir, overwrite_resume
-            )
-
-            if existing_cl_id and not overwrite_resume:
-                print("EXISTS")
-                logger.error(f"Cover letter '{cover_letter_title}' already exists")
-                raise click.ClickException(
-                    f"Cover letter '{cover_letter_title}' already exists. "
-                    "Use --overwrite-resume to overwrite."
-                )
-
-            # Add notes with URL and description to cover letter
-            final_cover_letter["metadata"]["notes"] = f"{effective_url}\n\n{job_description}"
-
-            click.echo("\n🚀 Creating cover letter in Reactive Resume...")
-
-            # Create cover letter with unique slug prefix to avoid collision with resume
-            cover_letter_id = rr_client.create_resume(
-                cover_letter_title, tags=[company], slug_prefix="cl"
-            )
-
-            # Update with data
-            rr_client.update_resume(cover_letter_id, final_cover_letter)
-
-            # Cache the reactive cover letter metadata
-            cache.save_reactive_cover_letter(
-                job_dir,
-                {
-                    "cover_letter_id": cover_letter_id,
-                    "title": cover_letter_title,
-                },
-            )
-            logger.cache_save("reactive_cover_letter", str(job_dir / "reactive_cover_letter.json"))
-
-            cover_letter_url = rr_client.get_resume_url(cover_letter_id)
-            logger.success(f"Cover letter created: {cover_letter_url}")
 
     except FileNotFoundError as e:
         logger.error(str(e))
