@@ -231,16 +231,11 @@ class TestLoginPage:
             assert "text/html" in response.headers.get("content-type", "")
 
 
-def _get_app_module():
-    """Get the fast_app.webapp.app module (not the FastAPI instance).
-
-    The webapp __init__.py re-exports `app` as the FastAPI instance,
-    so `import fast_app.webapp.app as app_module` resolves to the
-    FastAPI object, not the module. Use importlib to get the actual module.
-    """
+def _get_middleware_module():
+    """Get the fast_app.webapp.middleware module for auth cache access."""
     import importlib
 
-    return importlib.import_module("fast_app.webapp.app")
+    return importlib.import_module("fast_app.webapp.middleware")
 
 
 class TestAuthGuardPublicPaths:
@@ -249,10 +244,10 @@ class TestAuthGuardPublicPaths:
     @pytest.fixture(autouse=True)
     def _clear_auth_cache(self):
         """Clear the auth-enabled cache before and after each test."""
-        app_module = _get_app_module()
-        app_module._auth_enabled_cache.clear()
+        middleware_module = _get_middleware_module()
+        middleware_module._auth_enabled_cache.clear()
         yield
-        app_module._auth_enabled_cache.clear()
+        middleware_module._auth_enabled_cache.clear()
 
     def test_login_page_accessible_without_auth(self):
         """GET /login should always be accessible, even when auth is enabled."""
@@ -261,10 +256,10 @@ class TestAuthGuardPublicPaths:
         import fast_app.services.auth_core as auth_module
         from fast_app.webapp.app import app
 
-        app_module = _get_app_module()
+        middleware_module = _get_middleware_module()
 
         auth_module.JWT_SECRET = "test-secret-for-guard"
-        app_module._auth_enabled_cache.clear()
+        middleware_module._auth_enabled_cache.clear()
 
         client = TestClient(app)
         response = client.get("/login", follow_redirects=False)
@@ -277,10 +272,10 @@ class TestAuthGuardPublicPaths:
         import fast_app.services.auth_core as auth_module
         from fast_app.webapp.app import app
 
-        app_module = _get_app_module()
+        middleware_module = _get_middleware_module()
 
         auth_module.JWT_SECRET = "test-secret-for-guard"
-        app_module._auth_enabled_cache.clear()
+        middleware_module._auth_enabled_cache.clear()
 
         client = TestClient(app)
         response = client.get("/health", follow_redirects=False)
@@ -294,10 +289,10 @@ class TestAuthGuardPublicPaths:
         import fast_app.services.auth_core as auth_module
         from fast_app.webapp.app import app
 
-        app_module = _get_app_module()
+        middleware_module = _get_middleware_module()
 
         auth_module.JWT_SECRET = "test-secret-for-guard"
-        app_module._auth_enabled_cache.clear()
+        middleware_module._auth_enabled_cache.clear()
 
         client = TestClient(app)
         response = client.get("/api/auth/enabled", follow_redirects=False)
@@ -311,10 +306,10 @@ class TestAuthGuardPublicPaths:
         import fast_app.services.auth_core as auth_module
         from fast_app.webapp.app import app
 
-        app_module = _get_app_module()
+        middleware_module = _get_middleware_module()
 
         auth_module.JWT_SECRET = "test-secret-for-guard"
-        app_module._auth_enabled_cache.clear()
+        middleware_module._auth_enabled_cache.clear()
 
         client = TestClient(app)
         # Static file may return 200 or 404 depending on whether the file exists,
@@ -329,10 +324,10 @@ class TestAuthGuardPublicPaths:
         import fast_app.services.auth_core as auth_module
         from fast_app.webapp.app import app
 
-        app_module = _get_app_module()
+        middleware_module = _get_middleware_module()
 
         auth_module.JWT_SECRET = "test-secret-for-guard"
-        app_module._auth_enabled_cache.clear()
+        middleware_module._auth_enabled_cache.clear()
 
         client = TestClient(app)
         # POST with invalid credentials should get 401 or 422, NOT a redirect
@@ -350,10 +345,10 @@ class TestAuthGuardRedirect:
     @pytest.fixture(autouse=True)
     def _clear_auth_cache(self):
         """Clear the auth-enabled cache before and after each test."""
-        app_module = _get_app_module()
-        app_module._auth_enabled_cache.clear()
+        middleware_module = _get_middleware_module()
+        middleware_module._auth_enabled_cache.clear()
         yield
-        app_module._auth_enabled_cache.clear()
+        middleware_module._auth_enabled_cache.clear()
 
     def test_protected_path_redirects_when_auth_enabled(self):
         """GET / should redirect to /login when auth is enabled and no token is present."""
@@ -362,10 +357,10 @@ class TestAuthGuardRedirect:
         import fast_app.services.auth_core as auth_module
         from fast_app.webapp.app import app
 
-        app_module = _get_app_module()
+        middleware_module = _get_middleware_module()
 
         auth_module.JWT_SECRET = "test-secret-for-guard"
-        app_module._auth_enabled_cache.clear()
+        middleware_module._auth_enabled_cache.clear()
 
         client = TestClient(app)
         response = client.get("/", follow_redirects=False)
@@ -379,10 +374,10 @@ class TestAuthGuardRedirect:
         import fast_app.services.auth_core as auth_module
         from fast_app.webapp.app import app
 
-        app_module = _get_app_module()
+        middleware_module = _get_middleware_module()
 
         auth_module.JWT_SECRET = "test-secret-for-guard"
-        app_module._auth_enabled_cache.clear()
+        middleware_module._auth_enabled_cache.clear()
 
         client = TestClient(app)
         response = client.get("/api/status", follow_redirects=False)
@@ -397,10 +392,10 @@ class TestAuthGuardRedirect:
         from fast_app.services.auth import create_access_token
         from fast_app.webapp.app import app
 
-        app_module = _get_app_module()
+        middleware_module = _get_middleware_module()
 
         auth_module.JWT_SECRET = "test-secret-for-guard"
-        app_module._auth_enabled_cache.clear()
+        middleware_module._auth_enabled_cache.clear()
 
         token = create_access_token(user_id=1)
 
@@ -421,10 +416,10 @@ class TestAuthGuardRedirect:
         from fast_app.services.auth import create_access_token
         from fast_app.webapp.app import app
 
-        app_module = _get_app_module()
+        middleware_module = _get_middleware_module()
 
         auth_module.JWT_SECRET = "test-secret-for-guard"
-        app_module._auth_enabled_cache.clear()
+        middleware_module._auth_enabled_cache.clear()
 
         token = create_access_token(user_id=1)
 
@@ -443,10 +438,10 @@ class TestAuthGuardRedirect:
         import fast_app.services.auth_core as auth_module
         from fast_app.webapp.app import app
 
-        app_module = _get_app_module()
+        middleware_module = _get_middleware_module()
 
         auth_module.JWT_SECRET = ""
-        app_module._auth_enabled_cache.clear()
+        middleware_module._auth_enabled_cache.clear()
 
         client = TestClient(app)
         response = client.get("/", follow_redirects=False)
