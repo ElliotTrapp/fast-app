@@ -52,7 +52,12 @@ from typing import Any
 
 from ..config import Config
 from ..log import logger
-from ..models.knowledge import ExtractedFact, KnowledgeSearchResult
+from ..models.knowledge import (
+    ExtractedFact,
+    FactCreate,
+    FactUpdate,
+    KnowledgeSearchResult,
+)
 
 
 class KnowledgeService:
@@ -331,3 +336,145 @@ class KnowledgeService:
         collection.delete(ids=fact_ids)
         logger.info(f"Deleted {len(fact_ids)} facts from {self._collection_name}")
         return True
+
+    def add_fact(self, user_id: int, fact: FactCreate) -> dict[str, Any]:
+        """Add a single fact to the user's knowledge collection.
+
+        Args:
+            user_id: The user ID (used for collection isolation).
+            fact: FactCreate schema with content, category, source, job_url, confidence.
+
+        Returns:
+            Dict with id, content, category, source, job_url, confidence, created_at.
+        """
+        collection = self._get_or_create_collection()
+        if collection is None:
+            logger.warning("ChromaDB unavailable; fact not added")
+            return {}
+
+        fact_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+        metadata = {
+            "category": fact.category,
+            "source": fact.source or "manual_entry",
+            "confidence": fact.confidence,
+            "job_url": fact.job_url or "",
+            "extracted_at": now,
+        }
+
+        collection.add(
+            ids=[fact_id],
+            documents=[fact.content],
+            metadatas=[metadata],
+        )
+        logger.info(f"Added fact {fact_id} to {self._collection_name}")
+
+        return {
+            "id": fact_id,
+            "content": fact.content,
+            "category": fact.category,
+            "source": fact.source or "manual_entry",
+            "job_url": fact.job_url or "",
+            "confidence": fact.confidence,
+            "created_at": now,
+        }
+
+    def update_fact(self, user_id: int, fact_id: str, fact: FactUpdate) -> dict[str, Any] | None:
+        """Update an existing fact by deleting and re-inserting.
+
+        ChromaDB has no native update, so we delete the old fact and insert
+        a new one with updated fields. The UUID changes on update.
+
+        Args:
+            user_id: The user ID (used for collection isolation).
+            fact_id: The ID of the fact to update.
+            fact: FactUpdate schema with optional fields to update.
+
+        Returns:
+            Updated fact dict, or None if the fact was not found.
+        """
+        collection = self._get_or_create_collection()
+        if collection is None:
+            logger.warning("ChromaDB unavailable; fact not updated")
+            return None
+
+        # Retrieve the existing fact
+        try:
+            results = collection.get(ids=[fact_id])
+        except Exception:
+            return None
+
+        if not results["ids"]:
+            return None
+
+        # Extract existing values
+        old_content = results["documents"][0]
+        old_metadata = results["metadatas"][0]
+
+        # Merge updates
+        new_content = fact.content if fact.content is not None else old_content
+        new_category = (
+            fact.category if fact.category is not None else old_metadata.get("category", "general")
+        )
+        new_source = (
+            fact.source if fact.source is not None else old_metadata.get("source", "manual_entry")
+        )
+        new_confidence = (
+            fact.confidence if fact.confidence is not None else old_metadata.get("confidence", 1.0)
+        )
+        old_job_url = old_metadata.get("job_url", "")
+
+        # Delete old fact and insert new one
+        collection.delete(ids=[fact_id])
+
+        new_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+        new_metadata = {
+            "category": new_category,
+            "source": new_source,
+            "confidence": new_confidence,
+            "job_url": old_job_url,
+            "extracted_at": now,
+        }
+
+        collection.add(
+            ids=[new_id],
+            documents=[new_content],
+            metadatas=[new_metadata],
+        )
+        logger.info(f"Updated fact {fact_id} → {new_id} in {self._collection_name}")
+
+        return {
+            "id": new_id,
+            "content": new_content,
+            "category": new_category,
+            "source": new_source,
+            "job_url": old_job_url,
+            "confidence": new_confidence,
+            "created_at": now,
+        }
+
+    def get_categories(self, user_id: int) -> list[str]:
+        """Get unique categories from the user's knowledge collection.
+
+        Args:
+            user_id: The user ID (used for collection isolation).
+
+        Returns:
+            Sorted list of unique category strings.
+        """
+        collection = self._get_or_create_collection()
+        if collection is None:
+            return []
+
+        if collection.count() == 0:
+            return []
+
+        results = collection.get(include=["metadatas"])
+        categories = set()
+        for metadata in results["metadatas"]:
+            cat = metadata.get("category", "")
+            if cat:
+                categories.add(cat)
+
+        return sorted(categories)

@@ -33,7 +33,7 @@ from pydantic import BaseModel, Field
 from ..config import load_config
 from ..db import SessionDep
 from ..models.db_models import User
-from ..models.knowledge import KnowledgeSearchResult
+from ..models.knowledge import FactCreate, FactUpdate, KnowledgeSearchResult
 from ..services.auth import get_current_user
 from ..services.knowledge import KnowledgeService
 
@@ -157,3 +157,84 @@ async def delete_facts(
             detail="Failed to delete facts — knowledge store may be unavailable",
         )
     return {"status": "deleted", "count": len(request.ids)}
+
+
+@router.post("/facts", status_code=status.HTTP_201_CREATED)
+async def add_fact(
+    fact: FactCreate,
+    session: SessionDep,
+    user: User | None = Depends(get_current_user),
+):
+    """Add a new fact to the user's knowledge collection.
+
+    Args:
+        fact: FactCreate schema with content, category, source, job_url, confidence.
+        user: Current authenticated user (None if auth disabled).
+        session: Database session from dependency injection.
+
+    Returns:
+        Dict with id, content, category, source, job_url, confidence, created_at.
+    """
+    user_id = _resolve_user_id(user)
+    service = _get_service(user_id)
+    result = service.add_fact(user_id, fact)
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to add fact — knowledge store may be unavailable",
+        )
+    return result
+
+
+@router.put("/facts/{fact_id}")
+async def update_fact(
+    fact_id: str,
+    fact: FactUpdate,
+    session: SessionDep,
+    user: User | None = Depends(get_current_user),
+):
+    """Update an existing fact by ID.
+
+    ChromaDB has no native update, so the old fact is deleted and re-inserted
+    with updated fields. The UUID changes on update.
+
+    Args:
+        fact_id: The ID of the fact to update.
+        fact: FactUpdate schema with optional fields to update.
+        user: Current authenticated user (None if auth disabled).
+        session: Database session from dependency injection.
+
+    Returns:
+        Updated fact dict with new id, content, category, etc.
+
+    Raises:
+        HTTPException: 404 if fact not found.
+    """
+    user_id = _resolve_user_id(user)
+    service = _get_service(user_id)
+    result = service.update_fact(user_id, fact_id, fact)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Fact not found",
+        )
+    return result
+
+
+@router.get("/categories", response_model=list[str])
+async def get_categories(
+    session: SessionDep,
+    user: User | None = Depends(get_current_user),
+):
+    """Get unique categories from the user's knowledge collection.
+
+    Args:
+        user: Current authenticated user (None if auth disabled).
+        session: Database session from dependency injection.
+
+    Returns:
+        Sorted list of unique category strings.
+    """
+    user_id = _resolve_user_id(user)
+    service = _get_service(user_id)
+    return service.get_categories(user_id)

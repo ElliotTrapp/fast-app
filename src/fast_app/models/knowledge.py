@@ -108,6 +108,44 @@ class KnowledgeQuery(BaseModel):
     )
 
 
+class FactCreate(BaseModel):
+    """Schema for creating a new fact manually.
+
+    Attributes:
+        content: The fact content (e.g., "5 years Python experience").
+        category: Category for filtering (skill, experience, education, etc.).
+        source: Where this fact came from (e.g., "manual_entry").
+        job_url: Optional URL of the job posting related to this fact.
+        confidence: How clearly the fact was stated (0.0-1.0).
+    """
+
+    content: str = Field(..., description="The fact content")
+    category: str = Field(default="general", description="Category for filtering")
+    source: str | None = Field(default=None, description="Source of the fact")
+    job_url: str | None = Field(default=None, description="Related job URL")
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0, description="Confidence score (0.0-1.0)")
+
+
+class FactUpdate(BaseModel):
+    """Schema for updating an existing fact.
+
+    All fields are optional — only provided fields will be updated.
+
+    Attributes:
+        content: Updated fact content.
+        category: Updated category.
+        source: Updated source.
+        confidence: Updated confidence score.
+    """
+
+    content: str | None = Field(default=None, description="Updated fact content")
+    category: str | None = Field(default=None, description="Updated category")
+    source: str | None = Field(default=None, description="Updated source")
+    confidence: float | None = Field(
+        default=None, ge=0.0, le=1.0, description="Updated confidence score"
+    )
+
+
 class KnowledgeSearchResult(BaseModel):
     """A fact retrieved from the knowledge base via semantic search.
 
