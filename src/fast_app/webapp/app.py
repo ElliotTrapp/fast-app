@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from ..db import init_db
+from ..dotenv import load_dotenv
 from ..models.db_models import User
 from ..services.auth import get_current_user, is_auth_enabled
 from .auth_routes import router as auth_router
@@ -41,6 +42,7 @@ def _resolve_user_id(user: User | None) -> int:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown."""
+    load_dotenv()
     log_broadcaster.setup_logging()
 
     try:
