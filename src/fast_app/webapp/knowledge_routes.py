@@ -39,28 +39,9 @@ from ..models.db_models import User
 from ..models.knowledge import FactCreate, FactUpdate, KnowledgeSearchResult
 from ..services.auth import get_current_user
 from ..services.knowledge import KnowledgeService
+from .dependencies import resolve_user_id
 
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
-
-# Fallback user ID when auth is disabled
-_DEFAULT_USER_ID = 1
-
-
-def _resolve_user_id(user: User | None) -> int:
-    """Resolve the effective user ID from the authenticated user.
-
-    In auth-disabled mode (user is None), returns the default user ID (1).
-    In auth-enabled mode, returns the authenticated user's ID.
-
-    Args:
-        user: The authenticated User object, or None if auth is disabled.
-
-    Returns:
-        The effective user ID for knowledge operations.
-    """
-    if user is None:
-        return _DEFAULT_USER_ID
-    return user.id
 
 
 def _get_service(user_id: int) -> KnowledgeService:
@@ -102,7 +83,7 @@ async def search_facts(
     Returns:
         List of KnowledgeSearchResult objects ranked by relevance.
     """
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
     service = _get_service(user_id)
     results = service.query_facts(query=query, n=n, category=category)
     return results
@@ -126,7 +107,7 @@ async def list_facts(
     Returns:
         List of KnowledgeSearchResult objects.
     """
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
     service = _get_service(user_id)
     results = service.list_facts(limit=limit, category=category)
     return results
@@ -151,7 +132,7 @@ async def delete_facts(
     Raises:
         HTTPException: 500 if deletion failed (e.g., ChromaDB unavailable).
     """
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
     service = _get_service(user_id)
     success = service.delete_facts(request.ids)
     if not success:
@@ -182,7 +163,7 @@ async def delete_all_facts(
     Raises:
         HTTPException: 503 if ChromaDB is unavailable.
     """
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
     try:
         service = _get_service(user_id)
     except ImportError:
@@ -229,7 +210,7 @@ async def extract_from_profile(
         HTTPException: 503 if LLM or ChromaDB dependencies are unavailable.
         HTTPException: 500 if fact extraction fails.
     """
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
 
     try:
         from ..services.fact_extractor import FactExtractor
@@ -301,7 +282,7 @@ async def add_fact(
         HTTPException: 409 if a fact with identical content already exists.
         HTTPException: 500 if ChromaDB is unavailable.
     """
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
     service = _get_service(user_id)
     result = service.add_fact(user_id, fact)
     if not result:
@@ -341,7 +322,7 @@ async def update_fact(
     Raises:
         HTTPException: 404 if fact not found.
     """
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
     service = _get_service(user_id)
     result = service.update_fact(user_id, fact_id, fact)
     if result is None:
@@ -366,6 +347,6 @@ async def get_categories(
     Returns:
         Sorted list of unique category strings.
     """
-    user_id = _resolve_user_id(user)
+    user_id = resolve_user_id(user)
     service = _get_service(user_id)
     return service.get_categories(user_id)

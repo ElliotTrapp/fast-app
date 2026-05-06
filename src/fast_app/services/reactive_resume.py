@@ -1,63 +1,12 @@
 """Reactive Resume API client."""
 
 import json
-import time
 from typing import Any
 
 import requests
 
 from ..log import logger
-
-
-def with_retry(
-    max_retries: int = 3,
-    initial_delay: float = 1.0,
-    backoff_factor: float = 2.0,
-    retryable_status_codes: tuple = (429, 502, 503, 504),
-):
-    """Decorator to retry API calls with exponential backoff."""
-
-    def decorator(func):
-        def wrapper(self, *args, **kwargs):
-            last_exception: Exception | None = None
-            delay = initial_delay
-
-            for attempt in range(max_retries + 1):
-                try:
-                    return func(self, *args, **kwargs)
-                except requests.RequestException as e:
-                    last_exception = e
-                    if attempt < max_retries:
-                        import click
-
-                        click.echo(
-                            click.style(
-                                (
-                                    f"  ⚠️  API request failed "
-                                    f"(attempt {attempt + 1}/{max_retries + 1}): {e}"
-                                ),
-                                fg="yellow",
-                            )
-                        )
-                        click.echo(click.style(f"  ⏳ Retrying in {delay:.1f}s...", fg="yellow"))
-                        time.sleep(delay)
-                        delay *= backoff_factor
-                    else:
-                        raise RuntimeError(
-                            f"API request failed after {max_retries + 1} attempts.\n"
-                            f"  Last error: {e}\n\n"
-                            f"  Suggestion: Check if Reactive Resume is running "
-                            f"at {self.base_url}\n"
-                            f"  Verify your API key is valid in config.json"
-                        ) from e
-                except Exception as e:
-                    raise e
-
-            raise last_exception
-
-        return wrapper
-
-    return decorator
+from ..utils.retry import with_retry
 
 
 class ReactiveResumeClient:
