@@ -53,6 +53,14 @@ class ChromaConfig:
 
 
 @dataclass
+class JSearchConfig:
+    """Configuration for the JSearch job search API (RapidAPI)."""
+
+    api_key: str = ""  # RAPIDAPI_KEY
+    base_url: str = "https://jsearch.p.rapidapi.com"
+
+
+@dataclass
 class Config:
     ollama: OllamaConfig = field(default_factory=OllamaConfig)
     resume: ReactiveResumeConfig = field(default_factory=ReactiveResumeConfig)
@@ -60,6 +68,7 @@ class Config:
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
     chroma: ChromaConfig = field(default_factory=ChromaConfig)
+    jsearch: JSearchConfig = field(default_factory=JSearchConfig)
 
     @classmethod
     def from_dict(cls, data: dict) -> "Config":
@@ -69,6 +78,7 @@ class Config:
         database_data = data.get("database", {})
         llm_data = data.get("llm", {})
         chroma_data = data.get("chroma", {})
+        jsearch_data = data.get("jsearch", {})
 
         llm_model = llm_data.get("model", "")
 
@@ -106,6 +116,10 @@ class Config:
                 client_type=chroma_data.get("client_type", "persistent"),
                 host=chroma_data.get("host", "localhost"),
                 port=chroma_data.get("port", 8000),
+            ),
+            jsearch=JSearchConfig(
+                api_key=jsearch_data.get("api_key", ""),
+                base_url=jsearch_data.get("base_url", "https://jsearch.p.rapidapi.com"),
             ),
         )
 
@@ -150,6 +164,8 @@ class Config:
             config.chroma.embedding_model = os.environ["FAST_APP_CHROMA_EMBEDDING_MODEL"]
         if os.environ.get("FAST_APP_CHROMA_CLIENT_TYPE"):
             config.chroma.client_type = os.environ["FAST_APP_CHROMA_CLIENT_TYPE"]
+        if os.environ.get("FAST_APP_JSEARCH_API_KEY"):
+            config.jsearch.api_key = os.environ["FAST_APP_JSEARCH_API_KEY"]
 
         return config
 

@@ -14,6 +14,7 @@ from ..models.db_models import User
 from ..services.auth import get_current_user, is_auth_enabled
 from .auth_routes import router as auth_router
 from .background_tasks import process_job
+from .job_search_routes import router as job_search_router
 from .knowledge_routes import router as knowledge_router
 from .log_stream import log_broadcaster
 from .per_user_state import per_user_state
@@ -69,6 +70,7 @@ app = FastAPI(
 app.include_router(auth_router)
 app.include_router(profile_router)
 app.include_router(knowledge_router)
+app.include_router(job_search_router)
 
 # Mount static files
 static_dir = Path(__file__).parent.parent / "static"
@@ -223,6 +225,18 @@ async def knowledge_page():
         return HTMLResponse(content=knowledge_path.read_text(), status_code=200)
     return HTMLResponse(
         content="<html><body><h1>Knowledge page not found</h1></body></html>",
+        status_code=404,
+    )
+
+
+@app.get("/search", response_class=HTMLResponse)
+async def search_page():
+    """Serve the job search page."""
+    search_path = static_dir / "search.html"
+    if search_path.exists():
+        return HTMLResponse(content=search_path.read_text(), status_code=200)
+    return HTMLResponse(
+        content="<html><body><h1>Search page not found</h1></body></html>",
         status_code=404,
     )
 

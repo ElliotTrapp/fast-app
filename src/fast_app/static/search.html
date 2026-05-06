@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fast App - Job Search</title>
+    <link rel="stylesheet" href="/static/style.css?v=2">
+    <link rel="stylesheet" href="/static/app.css?v=1">
+    <link rel="stylesheet" href="/static/search.css?v=1">
+    <script src="/static/vendor/htmx.min.js"></script>
+    <script defer src="/static/vendor/alpine.min.js"></script>
+    <script src="/static/app-base.js"></script>
+    <script src="/static/navbar.js"></script>
+</head>
+<body>
+    <div class="container search-page" x-data="jobSearchEditor()">
+        <!-- Navbar -->
+        <nav class="navbar" x-show="true">
+            <div class="navbar-brand">
+                <a href="/" class="navbar-logo">🚀 Fast App</a>
+            </div>
+            <div class="navbar-links">
+                <a href="/" class="navbar-link">Generator</a>
+                <a href="/profile" class="navbar-link">Profile</a>
+                <a href="/knowledge" class="navbar-link">Knowledge</a>
+                <a href="/search" class="navbar-link active">Search</a>
+                <a href="/chat" class="navbar-link">Chat</a>
+            </div>
+            <div class="navbar-auth" x-show="$store.auth.authEnabled">
+                <template x-if="$store.auth.isLoggedIn">
+                    <div class="navbar-user">
+                        <span class="navbar-email" x-text="$store.auth.user?.email || ''"></span>
+                        <button class="btn-navbar-logout" @click="$store.auth.logout()">Logout</button>
+                    </div>
+                </template>
+                <template x-if="!$store.auth.isLoggedIn">
+                    <a href="/login" class="navbar-link">Login</a>
+                </template>
+            </div>
+        </nav>
+
+        <!-- Header -->
+        <div class="search-header">
+            <h1>🔍 Job Search</h1>
+            <p>Find jobs and generate tailored resumes instantly</p>
+        </div>
+
+        <!-- Search Form -->
+        <div class="search-form" @keydown.enter="searchJobs()">
+            <div class="form-group">
+                <label for="search-query">Keyword</label>
+                <input type="text" id="search-query" x-model="query" placeholder="e.g., python developer" class="search-input">
+            </div>
+            <div class="form-group">
+                <label for="search-location">Location</label>
+                <input type="text" id="search-location" x-model="location" placeholder="e.g., San Francisco, CA" class="search-input">
+            </div>
+            <button class="search-btn" @click="searchJobs()" :disabled="loading || !query.trim()">Search</button>
+        </div>
+
+        <!-- Filters -->
+        <div class="search-filters">
+            <div class="filter-group">
+                <label for="filter-date">Date Posted</label>
+                <select id="filter-date" x-model="datePosted" class="filter-select">
+                    <option value="">Any time</option>
+                    <option value="today">Today</option>
+                    <option value="3days">Last 3 days</option>
+                    <option value="week">Last week</option>
+                    <option value="month">Last month</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label for="filter-type">Job Type</label>
+                <select id="filter-type" x-model="jobType" class="filter-select">
+                    <option value="">All types</option>
+                    <option value="fulltime">Full-time</option>
+                    <option value="parttime">Part-time</option>
+                    <option value="contract">Contract</option>
+                    <option value="internship">Internship</option>
+                </select>
+            </div>
+            <label class="filter-checkbox">
+                <input type="checkbox" x-model="remote">
+                <span>Remote only</span>
+            </label>
+        </div>
+
+        <!-- Error State -->
+        <div x-show="error" x-transition class="error-message" :class="{ 'config-error': error.includes('not configured') }" x-text="error"></div>
+
+        <!-- Loading State -->
+        <div x-show="loading" class="loading-state">
+            <div class="spinner"></div>
+            <p>Searching for jobs...</p>
+        </div>
+
+        <!-- Results -->
+        <div x-show="!loading && !error">
+            <!-- Empty State (before first search) -->
+            <div x-show="!hasSearched" class="empty-state">
+                <div class="empty-icon">🔍</div>
+                <h2>Search for Jobs</h2>
+                <p class="empty-desc">Enter a keyword and location to find jobs. Then generate a tailored resume with one click.</p>
+            </div>
+
+            <!-- No Results State -->
+            <div x-show="hasSearched && jobs.length === 0" class="no-results">
+                <div class="no-results-icon">🤷</div>
+                <h3>No jobs found</h3>
+                <p>Try adjusting your search terms or filters.</p>
+            </div>
+
+            <!-- Results Table -->
+            <template x-if="hasSearched && jobs.length > 0">
+                <div>
+                    <div class="results-summary">
+                        <span><span class="results-count" x-text="total"></span> jobs found</span>
+                    </div>
+                    <div class="results-table-wrapper">
+                        <table class="results-table">
+                            <thead>
+                                <tr>
+                                    <th></th>
+                                    <th>Title</th>
+                                    <th>Location</th>
+                                    <th>Salary</th>
+                                    <th>Type</th>
+                                    <th>Posted</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <template x-for="job in jobs" :key="job.id">
+                                <tbody>
+                                    <tr class="job-row">
+                                        <td>
+                                            <template x-if="job.company_logo">
+                                                <img :src="job.company_logo" :alt="job.company" class="job-logo" loading="lazy">
+                                            </template>
+                                            <template x-if="!job.company_logo">
+                                                <div class="job-logo-placeholder" x-text="job.company ? job.company.charAt(0).toUpperCase() : '?'"></div>
+                                            </template>
+                                        </td>
+                                        <td>
+                                            <div class="job-title" x-text="job.title"></div>
+                                            <div class="job-company" x-text="job.company"></div>
+                                            <span x-show="job.is_remote" class="remote-badge">Remote</span>
+                                        </td>
+                                        <td>
+                                            <span class="job-location" x-text="job.location"></span>
+                                        </td>
+                                        <td>
+                                            <span x-show="formatSalary(job)" class="salary" x-text="formatSalary(job)"></span>
+                                        </td>
+                                        <td>
+                                            <span x-show="job.job_type" class="job-type" x-text="job.job_type"></span>
+                                        </td>
+                                        <td>
+                                            <span class="job-posted" x-text="job.posted_date"></span>
+                                        </td>
+                                        <td>
+                                            <div class="job-actions">
+                                                <button class="btn-generate" @click="generateResume(job)">Generate Resume</button>
+                                                <button class="description-toggle" @click="toggleDescription(job.id)">
+                                                    <span class="toggle-arrow" :class="{ open: isDescriptionExpanded(job.id) }">▶</span>
+                                                    <span x-text="isDescriptionExpanded(job.id) ? 'Hide Description' : 'Description'"></span>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <tr x-show="isDescriptionExpanded(job.id)" class="job-description-row">
+                                        <td colspan="7">
+                                            <div class="job-description" x-html="job.description"></div>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </template>
+                        </table>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <script src="/static/search.js?v=1"></script>
+</body>
+</html>
