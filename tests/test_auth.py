@@ -30,12 +30,12 @@ def check_auth_deps():
 
 @pytest.fixture(autouse=True)
 def reset_secret():
-    """Reset the SECRET_KEY module variable for each test."""
-    import fast_app.services.auth as auth_module
+    """Reset the JWT_SECRET module variable for each test."""
+    import fast_app.services.auth_core as auth_module
 
-    original = auth_module.SECRET_KEY
+    original = auth_module.JWT_SECRET
     yield
-    auth_module.SECRET_KEY = original
+    auth_module.JWT_SECRET = original
 
 
 class TestPasswordHashing:
@@ -81,66 +81,66 @@ class TestPasswordHashing:
 
 class TestJWTokens:
     def test_create_access_token_with_secret(self):
-        import fast_app.services.auth as auth_module
+        import fast_app.services.auth_core as auth_module
         from fast_app.services.auth import create_access_token
 
-        auth_module.SECRET_KEY = "test-secret-key-for-testing"
+        auth_module.JWT_SECRET = "test-secret-key-for-testing"
         token = create_access_token(user_id=1)
         assert isinstance(token, str)
         assert len(token) > 20
 
     def test_decode_access_token_with_secret(self):
-        import fast_app.services.auth as auth_module
+        import fast_app.services.auth_core as auth_module
         from fast_app.services.auth import create_access_token, decode_access_token
 
-        auth_module.SECRET_KEY = "test-secret-key-for-testing"
+        auth_module.JWT_SECRET = "test-secret-key-for-testing"
         token = create_access_token(user_id=42)
         payload = decode_access_token(token)
         assert payload["sub"] == "42"
         assert "exp" in payload
 
     def test_create_token_without_secret_raises(self):
-        import fast_app.services.auth as auth_module
+        import fast_app.services.auth_core as auth_module
         from fast_app.services.auth import create_access_token
 
-        auth_module.SECRET_KEY = ""
+        auth_module.JWT_SECRET = ""
         with pytest.raises(ValueError, match="FAST_APP_JWT_SECRET"):
             create_access_token(user_id=1)
 
     def test_decode_invalid_token_raises(self):
-        import fast_app.services.auth as auth_module
+        import fast_app.services.auth_core as auth_module
         from fast_app.services.auth import decode_access_token
 
-        auth_module.SECRET_KEY = "test-secret-key-for-testing"
+        auth_module.JWT_SECRET = "test-secret-key-for-testing"
         with pytest.raises(ValueError, match="Invalid or expired token"):
             decode_access_token("invalid.token.here")
 
     def test_decode_token_with_wrong_secret_raises(self):
-        import fast_app.services.auth as auth_module
+        import fast_app.services.auth_core as auth_module
         from fast_app.services.auth import create_access_token, decode_access_token
 
-        auth_module.SECRET_KEY = "secret-one"
+        auth_module.JWT_SECRET = "secret-one"
         token = create_access_token(user_id=1)
-        auth_module.SECRET_KEY = "secret-two"
+        auth_module.JWT_SECRET = "secret-two"
         with pytest.raises(ValueError):
             decode_access_token(token)
 
     def test_create_token_with_custom_expiry(self):
         from datetime import timedelta
 
-        import fast_app.services.auth as auth_module
+        import fast_app.services.auth_core as auth_module
         from fast_app.services.auth import create_access_token, decode_access_token
 
-        auth_module.SECRET_KEY = "test-secret-key-for-testing"
+        auth_module.JWT_SECRET = "test-secret-key-for-testing"
         token = create_access_token(user_id=1, expires_delta=timedelta(hours=1))
         payload = decode_access_token(token)
         assert payload["sub"] == "1"
 
     def test_token_contains_user_id(self):
-        import fast_app.services.auth as auth_module
+        import fast_app.services.auth_core as auth_module
         from fast_app.services.auth import create_access_token, decode_access_token
 
-        auth_module.SECRET_KEY = "test-secret-key-for-testing"
+        auth_module.JWT_SECRET = "test-secret-key-for-testing"
         for user_id in [1, 42, 9999]:
             token = create_access_token(user_id=user_id)
             payload = decode_access_token(token)
@@ -162,10 +162,10 @@ class TestAuthDisabledMode:
     def test_is_auth_enabled_with_secret(self):
         from sqlmodel import Session, SQLModel, create_engine
 
-        import fast_app.services.auth as auth_module
+        import fast_app.services.auth_core as auth_module
         from fast_app.services.auth import is_auth_enabled
 
-        auth_module.SECRET_KEY = "some-secret"
+        auth_module.JWT_SECRET = "some-secret"
         engine = create_engine("sqlite:///test_auth_enabled.db")
         SQLModel.metadata.create_all(engine)
         with Session(engine) as session:
@@ -174,10 +174,10 @@ class TestAuthDisabledMode:
     def test_is_auth_enabled_without_secret_and_no_users(self):
         from sqlmodel import Session, SQLModel, create_engine
 
-        import fast_app.services.auth as auth_module
+        import fast_app.services.auth_core as auth_module
         from fast_app.services.auth import is_auth_enabled
 
-        auth_module.SECRET_KEY = ""
+        auth_module.JWT_SECRET = ""
         engine = create_engine("sqlite:///test_auth_disabled.db")
         SQLModel.metadata.create_all(engine)
         with Session(engine) as session:
@@ -187,12 +187,12 @@ class TestAuthDisabledMode:
     def test_is_auth_enabled_without_secret_but_with_users(self):
         from sqlmodel import Session, SQLModel, create_engine
 
-        import fast_app.services.auth as auth_module
+        import fast_app.services.auth_core as auth_module
         from fast_app.db import init_db
         from fast_app.models.db_models import User
         from fast_app.services.auth import is_auth_enabled
 
-        auth_module.SECRET_KEY = ""
+        auth_module.JWT_SECRET = ""
         engine = create_engine("sqlite:///test_auth_with_user.db")
 
         init_db(config=None)
@@ -231,16 +231,11 @@ class TestLoginPage:
             assert "text/html" in response.headers.get("content-type", "")
 
 
-def _get_app_module():
-    """Get the fast_app.webapp.app module (not the FastAPI instance).
-
-    The webapp __init__.py re-exports `app` as the FastAPI instance,
-    so `import fast_app.webapp.app as app_module` resolves to the
-    FastAPI object, not the module. Use importlib to get the actual module.
-    """
+def _get_middleware_module():
+    """Get the fast_app.webapp.middleware module for auth cache access."""
     import importlib
 
-    return importlib.import_module("fast_app.webapp.app")
+    return importlib.import_module("fast_app.webapp.middleware")
 
 
 class TestAuthGuardPublicPaths:
@@ -249,22 +244,22 @@ class TestAuthGuardPublicPaths:
     @pytest.fixture(autouse=True)
     def _clear_auth_cache(self):
         """Clear the auth-enabled cache before and after each test."""
-        app_module = _get_app_module()
-        app_module._auth_enabled_cache.clear()
+        middleware_module = _get_middleware_module()
+        middleware_module._auth_enabled_cache.clear()
         yield
-        app_module._auth_enabled_cache.clear()
+        middleware_module._auth_enabled_cache.clear()
 
     def test_login_page_accessible_without_auth(self):
         """GET /login should always be accessible, even when auth is enabled."""
         from starlette.testclient import TestClient
 
-        import fast_app.services.auth as auth_module
+        import fast_app.services.auth_core as auth_module
         from fast_app.webapp.app import app
 
-        app_module = _get_app_module()
+        middleware_module = _get_middleware_module()
 
-        auth_module.SECRET_KEY = "test-secret-for-guard"
-        app_module._auth_enabled_cache.clear()
+        auth_module.JWT_SECRET = "test-secret-for-guard"
+        middleware_module._auth_enabled_cache.clear()
 
         client = TestClient(app)
         response = client.get("/login", follow_redirects=False)
@@ -274,13 +269,13 @@ class TestAuthGuardPublicPaths:
         """GET /health should always be accessible."""
         from starlette.testclient import TestClient
 
-        import fast_app.services.auth as auth_module
+        import fast_app.services.auth_core as auth_module
         from fast_app.webapp.app import app
 
-        app_module = _get_app_module()
+        middleware_module = _get_middleware_module()
 
-        auth_module.SECRET_KEY = "test-secret-for-guard"
-        app_module._auth_enabled_cache.clear()
+        auth_module.JWT_SECRET = "test-secret-for-guard"
+        middleware_module._auth_enabled_cache.clear()
 
         client = TestClient(app)
         response = client.get("/health", follow_redirects=False)
@@ -291,13 +286,13 @@ class TestAuthGuardPublicPaths:
         """GET /api/auth/enabled should be accessible without authentication."""
         from starlette.testclient import TestClient
 
-        import fast_app.services.auth as auth_module
+        import fast_app.services.auth_core as auth_module
         from fast_app.webapp.app import app
 
-        app_module = _get_app_module()
+        middleware_module = _get_middleware_module()
 
-        auth_module.SECRET_KEY = "test-secret-for-guard"
-        app_module._auth_enabled_cache.clear()
+        auth_module.JWT_SECRET = "test-secret-for-guard"
+        middleware_module._auth_enabled_cache.clear()
 
         client = TestClient(app)
         response = client.get("/api/auth/enabled", follow_redirects=False)
@@ -308,13 +303,13 @@ class TestAuthGuardPublicPaths:
         """Paths starting with /static/ should be accessible without auth."""
         from starlette.testclient import TestClient
 
-        import fast_app.services.auth as auth_module
+        import fast_app.services.auth_core as auth_module
         from fast_app.webapp.app import app
 
-        app_module = _get_app_module()
+        middleware_module = _get_middleware_module()
 
-        auth_module.SECRET_KEY = "test-secret-for-guard"
-        app_module._auth_enabled_cache.clear()
+        auth_module.JWT_SECRET = "test-secret-for-guard"
+        middleware_module._auth_enabled_cache.clear()
 
         client = TestClient(app)
         # Static file may return 200 or 404 depending on whether the file exists,
@@ -326,13 +321,13 @@ class TestAuthGuardPublicPaths:
         """POST /api/auth/login should be accessible without authentication."""
         from starlette.testclient import TestClient
 
-        import fast_app.services.auth as auth_module
+        import fast_app.services.auth_core as auth_module
         from fast_app.webapp.app import app
 
-        app_module = _get_app_module()
+        middleware_module = _get_middleware_module()
 
-        auth_module.SECRET_KEY = "test-secret-for-guard"
-        app_module._auth_enabled_cache.clear()
+        auth_module.JWT_SECRET = "test-secret-for-guard"
+        middleware_module._auth_enabled_cache.clear()
 
         client = TestClient(app)
         # POST with invalid credentials should get 401 or 422, NOT a redirect
@@ -350,22 +345,22 @@ class TestAuthGuardRedirect:
     @pytest.fixture(autouse=True)
     def _clear_auth_cache(self):
         """Clear the auth-enabled cache before and after each test."""
-        app_module = _get_app_module()
-        app_module._auth_enabled_cache.clear()
+        middleware_module = _get_middleware_module()
+        middleware_module._auth_enabled_cache.clear()
         yield
-        app_module._auth_enabled_cache.clear()
+        middleware_module._auth_enabled_cache.clear()
 
     def test_protected_path_redirects_when_auth_enabled(self):
         """GET / should redirect to /login when auth is enabled and no token is present."""
         from starlette.testclient import TestClient
 
-        import fast_app.services.auth as auth_module
+        import fast_app.services.auth_core as auth_module
         from fast_app.webapp.app import app
 
-        app_module = _get_app_module()
+        middleware_module = _get_middleware_module()
 
-        auth_module.SECRET_KEY = "test-secret-for-guard"
-        app_module._auth_enabled_cache.clear()
+        auth_module.JWT_SECRET = "test-secret-for-guard"
+        middleware_module._auth_enabled_cache.clear()
 
         client = TestClient(app)
         response = client.get("/", follow_redirects=False)
@@ -376,13 +371,13 @@ class TestAuthGuardRedirect:
         """GET /api/status should redirect to /login when auth is enabled and no token."""
         from starlette.testclient import TestClient
 
-        import fast_app.services.auth as auth_module
+        import fast_app.services.auth_core as auth_module
         from fast_app.webapp.app import app
 
-        app_module = _get_app_module()
+        middleware_module = _get_middleware_module()
 
-        auth_module.SECRET_KEY = "test-secret-for-guard"
-        app_module._auth_enabled_cache.clear()
+        auth_module.JWT_SECRET = "test-secret-for-guard"
+        middleware_module._auth_enabled_cache.clear()
 
         client = TestClient(app)
         response = client.get("/api/status", follow_redirects=False)
@@ -393,14 +388,14 @@ class TestAuthGuardRedirect:
         """GET / with a valid token should pass through auth guard."""
         from starlette.testclient import TestClient
 
-        import fast_app.services.auth as auth_module
+        import fast_app.services.auth_core as auth_module
         from fast_app.services.auth import create_access_token
         from fast_app.webapp.app import app
 
-        app_module = _get_app_module()
+        middleware_module = _get_middleware_module()
 
-        auth_module.SECRET_KEY = "test-secret-for-guard"
-        app_module._auth_enabled_cache.clear()
+        auth_module.JWT_SECRET = "test-secret-for-guard"
+        middleware_module._auth_enabled_cache.clear()
 
         token = create_access_token(user_id=1)
 
@@ -417,14 +412,14 @@ class TestAuthGuardRedirect:
         """GET / with Bearer token in header should pass through auth guard."""
         from starlette.testclient import TestClient
 
-        import fast_app.services.auth as auth_module
+        import fast_app.services.auth_core as auth_module
         from fast_app.services.auth import create_access_token
         from fast_app.webapp.app import app
 
-        app_module = _get_app_module()
+        middleware_module = _get_middleware_module()
 
-        auth_module.SECRET_KEY = "test-secret-for-guard"
-        app_module._auth_enabled_cache.clear()
+        auth_module.JWT_SECRET = "test-secret-for-guard"
+        middleware_module._auth_enabled_cache.clear()
 
         token = create_access_token(user_id=1)
 
@@ -440,13 +435,13 @@ class TestAuthGuardRedirect:
         """When auth is disabled, all paths should be accessible without a token."""
         from starlette.testclient import TestClient
 
-        import fast_app.services.auth as auth_module
+        import fast_app.services.auth_core as auth_module
         from fast_app.webapp.app import app
 
-        app_module = _get_app_module()
+        middleware_module = _get_middleware_module()
 
-        auth_module.SECRET_KEY = ""
-        app_module._auth_enabled_cache.clear()
+        auth_module.JWT_SECRET = ""
+        middleware_module._auth_enabled_cache.clear()
 
         client = TestClient(app)
         response = client.get("/", follow_redirects=False)
