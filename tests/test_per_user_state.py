@@ -1,14 +1,30 @@
 """Tests for per-user state management.
 
 Tests PerUserStateManager isolation, _resolve_user_id, and state file paths.
+
+Required deps: pip install -e ".[auth]"
 """
-
-
 
 import pytest
 
-from fast_app.webapp.per_user_state import PerUserStateManager
-from fast_app.webapp.state import JobState, StateManager
+
+def _check_deps():
+    """Check if auth dependencies are installed, skip if not."""
+    try:
+        import sqlmodel  # noqa: F401
+    except ImportError:
+        pytest.skip("auth deps not installed - pip install -e '.[auth]'")
+
+
+@pytest.fixture(autouse=True)
+def check_auth_deps():
+    """Skip all tests in this module if auth deps aren't installed."""
+    _check_deps()
+    yield
+
+
+from fast_app.webapp.per_user_state import PerUserStateManager  # noqa: E402
+from fast_app.webapp.state import JobState, StateManager  # noqa: E402
 
 
 @pytest.fixture
