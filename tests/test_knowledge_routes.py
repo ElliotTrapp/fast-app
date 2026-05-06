@@ -35,6 +35,15 @@ def reset_secret():
     auth_module.SECRET_KEY = original
 
 
+@pytest.fixture(autouse=True)
+def reset_knowledge_client_cache():
+    """Reset the KnowledgeService client cache between tests."""
+    from fast_app.services.knowledge import KnowledgeService
+
+    yield
+    KnowledgeService.reset_client_cache()
+
+
 @pytest.fixture()
 def client():
     """Create a TestClient with auth-disabled mode and in-memory DB."""
@@ -175,6 +184,33 @@ class TestDeleteFacts:
             json={"wrong_field": ["id1"]},
         )
         assert response.status_code == 422
+
+    def test_delete_persists_across_service_instances(self, client):
+        """Deleted facts must not reappear on subsequent list calls.
+
+        Regression test for the ChromaDB PersistentClient caching bug:
+        each request created a new KnowledgeService with a new PersistentClient,
+        and deletions on one client were invisible to another client's cache.
+        The fix caches PersistentClient instances at the class level.
+        """
+        create_resp = client.post(
+            "/api/knowledge/facts",
+            json={"content": "Fact to delete", "category": "test"},
+        )
+        assert create_resp.status_code == 201
+        fact_id = create_resp.json()["id"]
+
+        delete_resp = client.request(
+            "DELETE",
+            "/api/knowledge/facts",
+            json={"ids": [fact_id]},
+        )
+        assert delete_resp.status_code == 200
+
+        list_resp = client.get("/api/knowledge/facts")
+        assert list_resp.status_code == 200
+        remaining_ids = [f["id"] for f in list_resp.json()]
+        assert fact_id not in remaining_ids
 
 
 class TestAddFact:

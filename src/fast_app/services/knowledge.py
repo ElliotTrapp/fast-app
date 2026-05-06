@@ -69,11 +69,22 @@ class KnowledgeService:
     - Listing and deleting facts
     - Graceful degradation when ChromaDB is unavailable
 
+    ChromaDB PersistentClient instances are cached at the class level so that
+    all KnowledgeService objects sharing the same database path reuse the same
+    client.  This avoids stale-cache bugs where a deletion performed through one
+    client is not visible to a different client that still holds an in-memory
+    snapshot of the old data.
+
     Attributes:
         config: Application configuration containing ChromaConfig.
         _client: ChromaDB client instance (PersistentClient or HttpClient).
         _embedding_model: LangChain embedding model for vector operations.
     """
+
+    # Class-level cache: (db_path_or_url, client_type) → chromadb client
+    # Ensures a single PersistentClient per on-disk database, which prevents
+    # the "delete doesn't persist" bug caused by per-request client creation.
+    _client_cache: dict[tuple[str, str], Any] = {}
 
     def __init__(self, config: Config, user_id: int | None = None):
         """Initialize the knowledge service.
@@ -99,25 +110,44 @@ class KnowledgeService:
                 "Install with: pip install -e '.[knowledge]'"
             )
 
+    @classmethod
+    def reset_client_cache(cls) -> None:
+        """Clear the class-level ChromaDB client cache.
+
+        Primarily useful in tests to avoid state leaking between test cases.
+        """
+        cls._client_cache.clear()
+
     def _init_chromadb(self) -> None:
         """Initialize the ChromaDB client and embedding model.
 
         Uses PersistentClient for local development and HttpClient for
-        production ChromaDB server.
+        production ChromaDB server.  Client instances are cached at the
+        class level so that all KnowledgeService objects sharing the same
+        database path reuse the same client, preventing stale-cache bugs.
         """
         import chromadb
 
         if self.config.chroma.client_type == "http":
-            self._client = chromadb.HttpClient(
-                host=self.config.chroma.host,
-                port=self.config.chroma.port,
+            cache_key = (
+                f"http://{self.config.chroma.host}:{self.config.chroma.port}",
+                "http",
             )
+            if cache_key not in KnowledgeService._client_cache:
+                KnowledgeService._client_cache[cache_key] = chromadb.HttpClient(
+                    host=self.config.chroma.host,
+                    port=self.config.chroma.port,
+                )
+            self._client = KnowledgeService._client_cache[cache_key]
         else:
             from pathlib import Path
 
             db_path = self.config.chroma.path or str(Path.home() / ".fast-app" / "chroma")
-            Path(db_path).mkdir(parents=True, exist_ok=True)
-            self._client = chromadb.PersistentClient(path=db_path)
+            cache_key = (db_path, "persistent")
+            if cache_key not in KnowledgeService._client_cache:
+                Path(db_path).mkdir(parents=True, exist_ok=True)
+                KnowledgeService._client_cache[cache_key] = chromadb.PersistentClient(path=db_path)
+            self._client = KnowledgeService._client_cache[cache_key]
 
         self._init_embedding_model()
 
@@ -181,7 +211,8 @@ class KnowledgeService:
         """Store extracted facts in the user's knowledge collection.
 
         Each fact is embedded and stored with rich metadata for later retrieval
-        and filtering.
+        and filtering. Facts with duplicate content (case-insensitive exact
+        match) are skipped to prevent redundant entries.
 
         Args:
             facts: List of ExtractedFact objects from the fact extraction pipeline.
@@ -189,18 +220,30 @@ class KnowledgeService:
             source: Source of the facts (e.g., "qa_session", "manual_entry").
 
         Returns:
-            List of fact IDs that were stored.
+            List of fact IDs that were stored (excludes duplicates).
         """
         collection = self._get_or_create_collection()
         if collection is None:
             logger.warning("ChromaDB unavailable; facts not stored")
             return []
 
+        existing_contents = set()
+        if collection.count() > 0:
+            existing = collection.get(include=["documents"])
+            existing_contents = {doc.lower().strip() for doc in existing["documents"]}
+
         ids = []
         documents = []
         metadatas = []
+        skipped = 0
 
         for fact in facts:
+            normalized = fact.content.lower().strip()
+            if normalized in existing_contents:
+                skipped += 1
+                continue
+            existing_contents.add(normalized)
+
             fact_id = str(uuid.uuid4())
             ids.append(fact_id)
             documents.append(fact.content)
@@ -215,8 +258,11 @@ class KnowledgeService:
                 }
             )
 
-        collection.add(ids=ids, documents=documents, metadatas=metadatas)
-        logger.info(f"Stored {len(facts)} facts in {self._collection_name}")
+        if ids:
+            collection.add(ids=ids, documents=documents, metadatas=metadatas)
+        logger.info(
+            f"Stored {len(ids)} facts in {self._collection_name} (skipped {skipped} duplicates)"
+        )
 
         return ids
 
@@ -340,17 +386,31 @@ class KnowledgeService:
     def add_fact(self, user_id: int, fact: FactCreate) -> dict[str, Any]:
         """Add a single fact to the user's knowledge collection.
 
+        If a fact with identical content (case-insensitive) already exists,
+        the duplicate is skipped and an empty dict is returned.
+
         Args:
             user_id: The user ID (used for collection isolation).
             fact: FactCreate schema with content, category, source, job_url, confidence.
 
         Returns:
             Dict with id, content, category, source, job_url, confidence, created_at.
+            Empty dict if ChromaDB is unavailable or fact is a duplicate.
         """
         collection = self._get_or_create_collection()
         if collection is None:
             logger.warning("ChromaDB unavailable; fact not added")
             return {}
+
+        normalized = fact.content.lower().strip()
+        if collection.count() > 0:
+            existing = collection.get(include=["documents"])
+            existing_contents = {doc.lower().strip() for doc in existing["documents"]}
+            if normalized in existing_contents:
+                logger.info(
+                    f"Skipping duplicate fact in {self._collection_name}: {fact.content[:50]}"
+                )
+                return {"duplicate": True, "content": fact.content}
 
         fact_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
@@ -453,6 +513,36 @@ class KnowledgeService:
             "confidence": new_confidence,
             "created_at": now,
         }
+
+    def delete_all_facts(self) -> int:
+        """Delete all facts in the user's knowledge collection.
+
+        Removes every document from the user's ChromaDB collection.
+        Used when a user wants to start fresh (e.g., after importing a new profile).
+
+        Args:
+            None — operates on the collection identified by self._collection_name.
+
+        Returns:
+            The number of facts that were deleted. Returns 0 if the collection
+            is empty or ChromaDB is unavailable.
+        """
+        collection = self._get_or_create_collection()
+        if collection is None:
+            logger.warning("ChromaDB unavailable; no facts deleted")
+            return 0
+
+        count = collection.count()
+        if count == 0:
+            return 0
+
+        results = collection.get()
+        ids = results["ids"]
+        if ids:
+            collection.delete(ids=ids)
+            logger.info(f"Deleted {len(ids)} facts from {self._collection_name}")
+
+        return len(ids)
 
     def get_categories(self, user_id: int) -> list[str]:
         """Get unique categories from the user's knowledge collection.
