@@ -49,7 +49,7 @@ from fastapi.security import OAuth2PasswordBearer
 if TYPE_CHECKING:
     from sqlmodel import Session
 
-SECRET_KEY = os.environ.get("FAST_APP_JWT_SECRET", "")
+JWT_SECRET = os.environ.get("FAST_APP_JWT_SECRET", "")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("FAST_APP_JWT_EXPIRE_MINUTES", "1440"))
 
@@ -123,7 +123,7 @@ def create_access_token(user_id: int, expires_delta: timedelta | None = None) ->
     """Create a JWT access token for a user.
 
     The token contains the user ID as the "sub" (subject) claim and an
-    expiration time. It is signed with the configured SECRET_KEY using HS256.
+    expiration time. It is signed with the configured JWT_SECRET using HS256.
 
     Args:
         user_id: The user's database ID to encode in the token.
@@ -137,10 +137,10 @@ def create_access_token(user_id: int, expires_delta: timedelta | None = None) ->
         ValueError: If FAST_APP_JWT_SECRET is not set.
 
     Note:
-        The SECRET_KEY must be set via the FAST_APP_JWT_SECRET environment
+        The JWT_SECRET must be set via the FAST_APP_JWT_SECRET environment
         variable. If not set, this function raises ValueError.
     """
-    if not SECRET_KEY:
+    if not JWT_SECRET:
         raise ValueError(
             "FAST_APP_JWT_SECRET must be set for authentication. "
             'Generate one with: python3 -c "import secrets; print(secrets.token_urlsafe(32))"'
@@ -151,7 +151,7 @@ def create_access_token(user_id: int, expires_delta: timedelta | None = None) ->
         expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     to_encode = {"sub": str(user_id), "exp": expire}
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, JWT_SECRET, algorithm=ALGORITHM)
 
 
 def decode_access_token(token: str) -> dict:
@@ -166,12 +166,12 @@ def decode_access_token(token: str) -> dict:
     Raises:
         ValueError: If the token is invalid, expired, or the secret is missing.
     """
-    if not SECRET_KEY:
+    if not JWT_SECRET:
         raise ValueError("FAST_APP_JWT_SECRET must be set for authentication.")
 
     jwt_error_cls, jwt = _get_jose()
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[ALGORITHM])
         return payload
     except jwt_error_cls as e:
         raise ValueError(f"Invalid or expired token: {e}") from e
@@ -187,7 +187,7 @@ def is_auth_enabled(session: "Session") -> bool:
     Returns:
         True if auth should be enforced, False if running in auth-disabled mode.
     """
-    if SECRET_KEY:
+    if JWT_SECRET:
         return True
 
     _, select = _get_sqlmodel()
@@ -256,15 +256,7 @@ async def get_current_user(
                 detail="User not found or inactive",
             )
         return user
-    except (ValueError, Exception) as e:
-        # Re-raise ValueError from decode_access_token
-        if isinstance(e, ValueError):
-            jwt_error_cls, _ = _get_jose()
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail=f"Invalid or expired token: {e}",
-                headers={"WWW-Authenticate": "Bearer"},
-            ) from e
+    except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Invalid or expired token: {e}",
@@ -284,6 +276,6 @@ __all__ = [
     "is_auth_enabled",
     "get_current_user",
     "get_session",
-    "SECRET_KEY",
+    "JWT_SECRET",
     "ALGORITHM",
 ]

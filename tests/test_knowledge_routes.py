@@ -26,13 +26,13 @@ def check_knowledge_deps():
 
 @pytest.fixture(autouse=True)
 def reset_secret():
-    """Reset the SECRET_KEY module variable so auth is disabled."""
+    """Reset the JWT_SECRET module variable so auth is disabled."""
     import fast_app.services.auth as auth_module
 
-    original = auth_module.SECRET_KEY
-    auth_module.SECRET_KEY = ""
+    original = auth_module.JWT_SECRET
+    auth_module.JWT_SECRET = ""
     yield
-    auth_module.SECRET_KEY = original
+    auth_module.JWT_SECRET = original
 
 
 @pytest.fixture(autouse=True)
@@ -51,7 +51,14 @@ def client():
 
     from sqlmodel import Session, SQLModel, create_engine
 
-    from fast_app.config import ChromaConfig, Config, DatabaseConfig, LLMConfig, OllamaConfig
+    from fast_app.config import (
+        AuthConfig,
+        ChromaConfig,
+        Config,
+        DatabaseConfig,
+        LLMConfig,
+        OllamaConfig,
+    )
     from fast_app.db import get_session
     from fast_app.services.auth import get_current_user
     from fast_app.webapp.app import app
@@ -67,6 +74,7 @@ def client():
     test_config = Config(
         ollama=OllamaConfig(),
         database=DatabaseConfig(),
+        auth=AuthConfig(),
         llm=LLMConfig(),
         chroma=ChromaConfig(),
     )

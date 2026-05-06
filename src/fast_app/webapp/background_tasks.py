@@ -49,7 +49,9 @@ async def process_job(
         # Initialize services
         ollama = OllamaService(config.ollama)
         cache = CacheManager(Path.cwd() / config.output.directory)
-        rr_client = ReactiveResumeClient(config.resume.endpoint, config.resume.api_key)
+        rr_client = ReactiveResumeClient(
+            config.reactive_resume.endpoint, config.reactive_resume.api_key
+        )
 
         # Load profile and base resume
         profile = load_profile(None)

@@ -139,7 +139,7 @@ def _fetch_workday_cxs(tenant: str, host: str, site_id: str, job_url: str) -> st
                     logger.info("Workday CXS API: successfully fetched job detail")
                     return f"Title: {title}\n\nContent:\n{description}"
         except Exception as e:
-            logger._print(f"Workday CXS detail fetch failed: {e}")
+            logger.warning(f"Workday CXS detail fetch failed: {e}")
 
     # Step 3: Fallback — search for the job via the search API
     search_url = f"https://{host}/wday/cxs/{tenant}/{site_id}/jobs"
@@ -208,7 +208,7 @@ def _fetch_workday_cxs(tenant: str, host: str, site_id: str, job_url: str) -> st
                 return content
 
     except Exception as e:
-        logger._print(f"Workday CXS search API failed: {e}")
+        logger.warning(f"Workday CXS search API failed: {e}")
 
     return None
 
@@ -270,7 +270,7 @@ def _fetch_with_requests(url: str) -> str | None:
         return f"Title: {title}\n\nContent:\n{text}"
 
     except Exception as e:
-        logger._print(f"HTTP requests fetch failed: {e}")
+        logger.warning(f"HTTP requests fetch failed: {e}")
         return None
 
 

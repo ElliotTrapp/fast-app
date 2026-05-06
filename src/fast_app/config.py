@@ -27,11 +27,15 @@ class OutputConfig:
 
 
 @dataclass
-class DatabaseConfig:
-    path: str = ""
+class AuthConfig:
     jwt_secret: str = ""
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 1440
+
+
+@dataclass
+class DatabaseConfig:
+    path: str = ""
 
 
 @dataclass
@@ -63,9 +67,10 @@ class JSearchConfig:
 @dataclass
 class Config:
     ollama: OllamaConfig = field(default_factory=OllamaConfig)
-    resume: ReactiveResumeConfig = field(default_factory=ReactiveResumeConfig)
+    reactive_resume: ReactiveResumeConfig = field(default_factory=ReactiveResumeConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
+    auth: AuthConfig = field(default_factory=AuthConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
     chroma: ChromaConfig = field(default_factory=ChromaConfig)
     jsearch: JSearchConfig = field(default_factory=JSearchConfig)
@@ -73,9 +78,10 @@ class Config:
     @classmethod
     def from_dict(cls, data: dict) -> "Config":
         ollama_data = data.get("ollama", {})
-        resume_data = data.get("resume", {})
+        resume_data = data.get("resume", data.get("reactive_resume", {}))
         output_data = data.get("output", {})
         database_data = data.get("database", {})
+        auth_data = data.get("auth", {})
         llm_data = data.get("llm", {})
         chroma_data = data.get("chroma", {})
         jsearch_data = data.get("jsearch", {})
@@ -90,7 +96,7 @@ class Config:
                 debug=ollama_data.get("debug", False),
                 api_key=ollama_data.get("api_key", ""),
             ),
-            resume=ReactiveResumeConfig(
+            reactive_resume=ReactiveResumeConfig(
                 endpoint=resume_data.get("endpoint", "http://localhost:3000"),
                 api_key=resume_data.get("api_key", ""),
             ),
@@ -99,9 +105,11 @@ class Config:
             ),
             database=DatabaseConfig(
                 path=database_data.get("path", ""),
-                jwt_secret=database_data.get("jwt_secret", ""),
-                jwt_algorithm=database_data.get("jwt_algorithm", "HS256"),
-                jwt_expire_minutes=database_data.get("jwt_expire_minutes", 1440),
+            ),
+            auth=AuthConfig(
+                jwt_secret=auth_data.get("jwt_secret", database_data.get("jwt_secret", "")),
+                jwt_algorithm=auth_data.get("jwt_algorithm", "HS256"),
+                jwt_expire_minutes=auth_data.get("jwt_expire_minutes", 1440),
             ),
             llm=LLMConfig(
                 provider=llm_data.get("provider", "ollama"),
@@ -141,15 +149,15 @@ class Config:
         if os.environ.get("OLLAMA_MODEL"):
             config.ollama.model = os.environ["OLLAMA_MODEL"]
         if os.environ.get("RESUME_ENDPOINT"):
-            config.resume.endpoint = os.environ["RESUME_ENDPOINT"]
+            config.reactive_resume.endpoint = os.environ["RESUME_ENDPOINT"]
         if os.environ.get("RESUME_API_KEY"):
-            config.resume.api_key = os.environ["RESUME_API_KEY"]
+            config.reactive_resume.api_key = os.environ["RESUME_API_KEY"]
         if os.environ.get("FAST_APP_DB_PATH"):
             config.database.path = os.environ["FAST_APP_DB_PATH"]
         if os.environ.get("FAST_APP_JWT_SECRET"):
-            config.database.jwt_secret = os.environ["FAST_APP_JWT_SECRET"]
+            config.auth.jwt_secret = os.environ["FAST_APP_JWT_SECRET"]
         if os.environ.get("FAST_APP_JWT_EXPIRE_MINUTES"):
-            config.database.jwt_expire_minutes = int(os.environ["FAST_APP_JWT_EXPIRE_MINUTES"])
+            config.auth.jwt_expire_minutes = int(os.environ["FAST_APP_JWT_EXPIRE_MINUTES"])
         if os.environ.get("FAST_APP_LLM_PROVIDER"):
             config.llm.provider = os.environ["FAST_APP_LLM_PROVIDER"]
         if os.environ.get("FAST_APP_LLM_MODEL"):

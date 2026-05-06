@@ -140,7 +140,7 @@ async def auth_guard(request: Request, call_next):
             user_id = int(payload.get("sub", 0))
             if user_id > 0:
                 return await call_next(request)
-        except (ValueError, Exception):
+        except Exception:
             pass
 
     return RedirectResponse(url="/login", status_code=303)
@@ -153,9 +153,9 @@ def _is_auth_enabled_cached() -> bool:
     """Check if auth is enabled, caching the result for 60 seconds."""
     import time
 
-    from ..services.auth import SECRET_KEY
+    from ..services.auth import JWT_SECRET
 
-    cache_key = SECRET_KEY or "no_secret"
+    cache_key = JWT_SECRET or "no_secret"
     now = time.time()
     cached = _auth_enabled_cache.get(cache_key)
     if cached is not None:
@@ -163,7 +163,7 @@ def _is_auth_enabled_cached() -> bool:
         if now - cached_time < 60:
             return cached_value
 
-    if SECRET_KEY:
+    if JWT_SECRET:
         _auth_enabled_cache[cache_key] = (now, True)
         return True
 

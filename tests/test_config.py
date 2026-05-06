@@ -64,13 +64,13 @@ class TestConfig:
     def test_default_values(self):
         config = Config()
         assert config.ollama.endpoint == "http://localhost:11434"
-        assert config.resume.endpoint == "http://localhost:3000"
+        assert config.reactive_resume.endpoint == "http://localhost:3000"
         assert config.output.directory == "generated"
 
     def test_from_dict_minimal(self):
         config = Config.from_dict({})
         assert config.ollama.model == "llama3.2"
-        assert config.resume.api_key == ""
+        assert config.reactive_resume.api_key == ""
 
     def test_from_dict_full(self):
         data = {
@@ -86,7 +86,7 @@ class TestConfig:
         config = Config.from_dict(data)
         assert config.ollama.endpoint == "http://custom.com"
         assert config.ollama.model == "custom-model"
-        assert config.resume.api_key == "resume-key"
+        assert config.reactive_resume.api_key == "resume-key"
         assert config.output.directory == "custom-output"
 
     def test_from_file(self):
@@ -109,7 +109,7 @@ class TestConfig:
         try:
             config = Config.from_file(temp_path)
             assert config.ollama.model == "llama3.2"
-            assert config.resume.api_key == "test-key"
+            assert config.reactive_resume.api_key == "test-key"
         finally:
             Path(temp_path).unlink()
 
@@ -163,7 +163,7 @@ class TestLoadConfig:
         try:
             config = load_config(temp_path)
             assert config.ollama.model == "llama3.2"
-            assert config.resume.api_key == "test-key"
+            assert config.reactive_resume.api_key == "test-key"
         finally:
             Path(temp_path).unlink()
 
@@ -188,6 +188,6 @@ class TestLoadConfig:
             config = load_config(temp_path)
             assert isinstance(config, Config)
             assert isinstance(config.ollama, OllamaConfig)
-            assert isinstance(config.resume, ReactiveResumeConfig)
+            assert isinstance(config.reactive_resume, ReactiveResumeConfig)
         finally:
             Path(temp_path).unlink()

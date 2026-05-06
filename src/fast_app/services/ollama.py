@@ -9,6 +9,7 @@ always use the direct Ollama SDK regardless of LangChain availability.
 import asyncio
 import json
 from pathlib import Path
+from typing import Any
 
 import requests
 from ollama import Client
@@ -172,7 +173,7 @@ class OllamaService:
             return False
 
     async def _generate_questions_async(
-        self, job_data: dict[str, any], profile_data: dict[str, any]
+        self, job_data: dict[str, Any], profile_data: dict[str, Any]
     ) -> list[str]:
         """Async version of question generation."""
         prompt = get_questions_prompt(job_data, profile_data)
@@ -213,8 +214,8 @@ class OllamaService:
     @with_retry(max_retries=3, initial_delay=2.0)
     def generate_questions(
         self,
-        job_data: dict[str, any],
-        profile_data: dict[str, any],
+        job_data: dict[str, Any],
+        profile_data: dict[str, Any],
         knowledge_context: list[str] | None = None,
     ) -> list[str]:
         """Generate clarifying questions for resume tailoring.
@@ -245,12 +246,12 @@ class OllamaService:
 
     async def _generate_resume_async(
         self,
-        job_data: dict[str, any],
-        profile_data: dict[str, any],
+        job_data: dict[str, Any],
+        profile_data: dict[str, Any],
         questions: list[str] | None,
         answers: list[str] | None,
         output_path: str,
-    ) -> dict[str, any]:
+    ) -> dict[str, Any]:
         """Async version of resume generation."""
         prompt = get_resume_prompt(job_data, profile_data, questions, answers)
 
@@ -310,12 +311,12 @@ class OllamaService:
     @with_retry(max_retries=3, initial_delay=2.0)
     def generate_cover_letter(
         self,
-        job_data: dict[str, any],
-        profile_data: dict[str, any],
+        job_data: dict[str, Any],
+        profile_data: dict[str, Any],
         questions: list[str] | None = None,
         answers: list[str] | None = None,
         output_path: str = "debug_cover_letter_output.json",
-    ) -> dict[str, any]:
+    ) -> dict[str, Any]:
         """Generate a tailored cover letter from job and profile data.
 
         Args:
@@ -349,12 +350,12 @@ class OllamaService:
 
     async def _generate_cover_letter_async(
         self,
-        job_data: dict[str, any],
-        profile_data: dict[str, any],
+        job_data: dict[str, Any],
+        profile_data: dict[str, Any],
         questions: list[str] | None,
         answers: list[str] | None,
         output_path: str,
-    ) -> dict[str, any]:
+    ) -> dict[str, Any]:
         """Async version of cover letter generation."""
         prompt = get_cover_letter_prompt(job_data, profile_data, questions, answers)
 
@@ -419,12 +420,12 @@ class OllamaService:
     @with_retry(max_retries=3, initial_delay=2.0)
     def generate_resume(
         self,
-        job_data: dict[str, any],
-        profile_data: dict[str, any],
+        job_data: dict[str, Any],
+        profile_data: dict[str, Any],
         questions: list[str] | None = None,
         answers: list[str] | None = None,
         output_path: str = "debug_llm_output.json",
-    ) -> dict[str, any]:
+    ) -> dict[str, Any]:
         """Generate a tailored resume from job and profile data.
 
         Args:

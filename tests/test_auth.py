@@ -30,12 +30,12 @@ def check_auth_deps():
 
 @pytest.fixture(autouse=True)
 def reset_secret():
-    """Reset the SECRET_KEY module variable for each test."""
+    """Reset the JWT_SECRET module variable for each test."""
     import fast_app.services.auth as auth_module
 
-    original = auth_module.SECRET_KEY
+    original = auth_module.JWT_SECRET
     yield
-    auth_module.SECRET_KEY = original
+    auth_module.JWT_SECRET = original
 
 
 class TestPasswordHashing:
@@ -84,7 +84,7 @@ class TestJWTokens:
         import fast_app.services.auth as auth_module
         from fast_app.services.auth import create_access_token
 
-        auth_module.SECRET_KEY = "test-secret-key-for-testing"
+        auth_module.JWT_SECRET = "test-secret-key-for-testing"
         token = create_access_token(user_id=1)
         assert isinstance(token, str)
         assert len(token) > 20
@@ -93,7 +93,7 @@ class TestJWTokens:
         import fast_app.services.auth as auth_module
         from fast_app.services.auth import create_access_token, decode_access_token
 
-        auth_module.SECRET_KEY = "test-secret-key-for-testing"
+        auth_module.JWT_SECRET = "test-secret-key-for-testing"
         token = create_access_token(user_id=42)
         payload = decode_access_token(token)
         assert payload["sub"] == "42"
@@ -103,7 +103,7 @@ class TestJWTokens:
         import fast_app.services.auth as auth_module
         from fast_app.services.auth import create_access_token
 
-        auth_module.SECRET_KEY = ""
+        auth_module.JWT_SECRET = ""
         with pytest.raises(ValueError, match="FAST_APP_JWT_SECRET"):
             create_access_token(user_id=1)
 
@@ -111,7 +111,7 @@ class TestJWTokens:
         import fast_app.services.auth as auth_module
         from fast_app.services.auth import decode_access_token
 
-        auth_module.SECRET_KEY = "test-secret-key-for-testing"
+        auth_module.JWT_SECRET = "test-secret-key-for-testing"
         with pytest.raises(ValueError, match="Invalid or expired token"):
             decode_access_token("invalid.token.here")
 
@@ -119,9 +119,9 @@ class TestJWTokens:
         import fast_app.services.auth as auth_module
         from fast_app.services.auth import create_access_token, decode_access_token
 
-        auth_module.SECRET_KEY = "secret-one"
+        auth_module.JWT_SECRET = "secret-one"
         token = create_access_token(user_id=1)
-        auth_module.SECRET_KEY = "secret-two"
+        auth_module.JWT_SECRET = "secret-two"
         with pytest.raises(ValueError):
             decode_access_token(token)
 
@@ -131,7 +131,7 @@ class TestJWTokens:
         import fast_app.services.auth as auth_module
         from fast_app.services.auth import create_access_token, decode_access_token
 
-        auth_module.SECRET_KEY = "test-secret-key-for-testing"
+        auth_module.JWT_SECRET = "test-secret-key-for-testing"
         token = create_access_token(user_id=1, expires_delta=timedelta(hours=1))
         payload = decode_access_token(token)
         assert payload["sub"] == "1"
@@ -140,7 +140,7 @@ class TestJWTokens:
         import fast_app.services.auth as auth_module
         from fast_app.services.auth import create_access_token, decode_access_token
 
-        auth_module.SECRET_KEY = "test-secret-key-for-testing"
+        auth_module.JWT_SECRET = "test-secret-key-for-testing"
         for user_id in [1, 42, 9999]:
             token = create_access_token(user_id=user_id)
             payload = decode_access_token(token)
@@ -165,7 +165,7 @@ class TestAuthDisabledMode:
         import fast_app.services.auth as auth_module
         from fast_app.services.auth import is_auth_enabled
 
-        auth_module.SECRET_KEY = "some-secret"
+        auth_module.JWT_SECRET = "some-secret"
         engine = create_engine("sqlite:///test_auth_enabled.db")
         SQLModel.metadata.create_all(engine)
         with Session(engine) as session:
@@ -177,7 +177,7 @@ class TestAuthDisabledMode:
         import fast_app.services.auth as auth_module
         from fast_app.services.auth import is_auth_enabled
 
-        auth_module.SECRET_KEY = ""
+        auth_module.JWT_SECRET = ""
         engine = create_engine("sqlite:///test_auth_disabled.db")
         SQLModel.metadata.create_all(engine)
         with Session(engine) as session:
@@ -192,7 +192,7 @@ class TestAuthDisabledMode:
         from fast_app.models.db_models import User
         from fast_app.services.auth import is_auth_enabled
 
-        auth_module.SECRET_KEY = ""
+        auth_module.JWT_SECRET = ""
         engine = create_engine("sqlite:///test_auth_with_user.db")
 
         init_db(config=None)
@@ -263,7 +263,7 @@ class TestAuthGuardPublicPaths:
 
         app_module = _get_app_module()
 
-        auth_module.SECRET_KEY = "test-secret-for-guard"
+        auth_module.JWT_SECRET = "test-secret-for-guard"
         app_module._auth_enabled_cache.clear()
 
         client = TestClient(app)
@@ -279,7 +279,7 @@ class TestAuthGuardPublicPaths:
 
         app_module = _get_app_module()
 
-        auth_module.SECRET_KEY = "test-secret-for-guard"
+        auth_module.JWT_SECRET = "test-secret-for-guard"
         app_module._auth_enabled_cache.clear()
 
         client = TestClient(app)
@@ -296,7 +296,7 @@ class TestAuthGuardPublicPaths:
 
         app_module = _get_app_module()
 
-        auth_module.SECRET_KEY = "test-secret-for-guard"
+        auth_module.JWT_SECRET = "test-secret-for-guard"
         app_module._auth_enabled_cache.clear()
 
         client = TestClient(app)
@@ -313,7 +313,7 @@ class TestAuthGuardPublicPaths:
 
         app_module = _get_app_module()
 
-        auth_module.SECRET_KEY = "test-secret-for-guard"
+        auth_module.JWT_SECRET = "test-secret-for-guard"
         app_module._auth_enabled_cache.clear()
 
         client = TestClient(app)
@@ -331,7 +331,7 @@ class TestAuthGuardPublicPaths:
 
         app_module = _get_app_module()
 
-        auth_module.SECRET_KEY = "test-secret-for-guard"
+        auth_module.JWT_SECRET = "test-secret-for-guard"
         app_module._auth_enabled_cache.clear()
 
         client = TestClient(app)
@@ -364,7 +364,7 @@ class TestAuthGuardRedirect:
 
         app_module = _get_app_module()
 
-        auth_module.SECRET_KEY = "test-secret-for-guard"
+        auth_module.JWT_SECRET = "test-secret-for-guard"
         app_module._auth_enabled_cache.clear()
 
         client = TestClient(app)
@@ -381,7 +381,7 @@ class TestAuthGuardRedirect:
 
         app_module = _get_app_module()
 
-        auth_module.SECRET_KEY = "test-secret-for-guard"
+        auth_module.JWT_SECRET = "test-secret-for-guard"
         app_module._auth_enabled_cache.clear()
 
         client = TestClient(app)
@@ -399,7 +399,7 @@ class TestAuthGuardRedirect:
 
         app_module = _get_app_module()
 
-        auth_module.SECRET_KEY = "test-secret-for-guard"
+        auth_module.JWT_SECRET = "test-secret-for-guard"
         app_module._auth_enabled_cache.clear()
 
         token = create_access_token(user_id=1)
@@ -423,7 +423,7 @@ class TestAuthGuardRedirect:
 
         app_module = _get_app_module()
 
-        auth_module.SECRET_KEY = "test-secret-for-guard"
+        auth_module.JWT_SECRET = "test-secret-for-guard"
         app_module._auth_enabled_cache.clear()
 
         token = create_access_token(user_id=1)
@@ -445,7 +445,7 @@ class TestAuthGuardRedirect:
 
         app_module = _get_app_module()
 
-        auth_module.SECRET_KEY = ""
+        auth_module.JWT_SECRET = ""
         app_module._auth_enabled_cache.clear()
 
         client = TestClient(app)
